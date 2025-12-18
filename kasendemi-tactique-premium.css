@@ -44,6 +44,56 @@
   margin-bottom: 5px;
 }
 
+.kas-move-column {
+  background: #fff;
+  border: 1px solid #e6e6f4;
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 1px 6px #0000000a;
+  flex: 1 1 260px;
+  min-width: 240px;
+}
+.kas-move-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.kas-move-summary {
+  font-size: 12px;
+  color: #1f2f3a;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+.kas-move-details {
+  margin-top: 8px;
+  border-top: 1px dashed #dcdcdc;
+  padding-top: 8px;
+}
+.kas-gear-btn {
+  border: 1px solid #d6d6e5;
+  background: #f7f7fb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.kas-gear-btn[data-open="1"] {
+  background: #ffe8a0;
+  border-color: #f1c453;
+}
+.kas-move-status {
+  font-size: 12px;
+  color: #2d7a46;
+  opacity: 0;
+  transition: opacity .2s;
+  margin-top: 4px;
+}
+.kas-move-status[data-active="1"] {
+  opacity: 1;
+}
+
 /* Inputs number pour les numéros et la vitesse */
 input[type="number"] {
   width: 66px !important;   /* Plus large pour vitesse (2000, etc.) */
