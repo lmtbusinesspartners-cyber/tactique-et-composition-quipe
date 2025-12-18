@@ -45,10 +45,17 @@ document.addEventListener("DOMContentLoaded", async function () {
               <div class="kas-row">
                 <label class="kas-inline" style="min-width:260px">
                   <span style="width:130px;display:inline-block">Taille (x)</span>
-                  <input id="ks-player-scale" type="range" min="0.5" max="1.4" step="0.05" value="0.8" style="flex:1">
+                  <input id="ks-player-scale" type="range" min="0.2" max="1.4" step="0.05" value="0.8" style="flex:1">
                   <span id="ks-player-scale-val" style="width:48px;text-align:right">0.80</span>
                 </label>
                 <button id="ks-player-scale-reset" class="kas-btn">Réinitialiser</button>
+              </div>
+              <div class="kas-row" style="margin-top:8px;">
+                <label class="kas-inline" style="min-width:260px">
+                  <span style="width:130px;display:inline-block">Taille ballon</span>
+                  <input id="ks-ball-scale" type="range" min="0.2" max="2.0" step="0.05" value="1" style="flex:1">
+                  <span id="ks-ball-scale-val" style="width:48px;text-align:right">1.00</span>
+                </label>
               </div>
             </div>
 
@@ -497,6 +504,8 @@ function moveControlsNearField(){
       const scaleInput = dock.querySelector("#ks-player-scale");
       const scaleVal   = dock.querySelector("#ks-player-scale-val");
       const scaleReset = dock.querySelector("#ks-player-scale-reset");
+      const ballScaleInput = dock.querySelector("#ks-ball-scale");
+      const ballScaleVal   = dock.querySelector("#ks-ball-scale-val");
       const labelMode  = dock.querySelector("#ks-label-mode");
       const labelShadow= dock.querySelector("#ks-label-shadow");
       const defStyle   = dock.querySelector("#ks-default-style");
@@ -506,19 +515,28 @@ function moveControlsNearField(){
         const d = getDisplay();
         scaleInput.value = String(d.playerScale || 0.8);
         scaleVal.textContent = (d.playerScale||0.8).toFixed(2);
+        ballScaleInput.value = String(d.ballScale || 1);
+        ballScaleVal.textContent = (d.ballScale||1).toFixed(2);
         labelMode.value = d.labelMode || "numero";
         labelShadow.checked = !!d.labelShadow;
         defStyle.value = d.defaultStyle || "silhouette";
         defCircle.value = d.defaultCircleColor || "#00bfff";
       }
       scaleInput.addEventListener("input", ()=>{
-        getDisplay().playerScale = parseFloat(scaleInput.value||"0.8");
+        getDisplay().playerScale = clampPlayerScale(parseFloat(scaleInput.value||"0.8"));
+        scaleInput.value = String(getDisplay().playerScale);
         scaleVal.textContent = getDisplay().playerScale.toFixed(2);
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
       });
       scaleReset.addEventListener("click", ()=>{
         getDisplay().playerScale = 0.8; scaleInput.value="0.8"; scaleVal.textContent="0.80";
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
+      });
+      ballScaleInput.addEventListener("input", ()=>{
+        getDisplay().ballScale = clampBallScale(parseFloat(ballScaleInput.value||"1"));
+        ballScaleInput.value = String(getDisplay().ballScale);
+        ballScaleVal.textContent = getDisplay().ballScale.toFixed(2);
+        saveSimulations(); if (mode==="tactic") { drawBall(); drawAnnotations(); }
       });
       labelMode.addEventListener("change", ()=>{
         getDisplay().labelMode = labelMode.value;
@@ -684,6 +702,17 @@ reorderDockPanels();           // impose l'ordre final des blocs
     drawAnnotations();
   }
 
+  function clampPlayerScale(val){
+    const v = parseFloat(val);
+    if (Number.isNaN(v)) return 0.8;
+    return Math.min(1.4, Math.max(0.2, v));
+  }
+  function clampBallScale(val){
+    const v = parseFloat(val);
+    if (Number.isNaN(v)) return 1;
+    return Math.min(2, Math.max(0.2, v));
+  }
+
   // Affichage global persisté dans simulations._display
   function getDisplay(){
     if (!simulations._display) simulations._display = {
@@ -692,7 +721,10 @@ reorderDockPanels();           // impose l'ordre final des blocs
       labelShadow: true,
       defaultStyle: "silhouette",
       defaultCircleColor: "#00bfff",
+      ballScale: 1,
     };
+    simulations._display.playerScale = clampPlayerScale(simulations._display.playerScale);
+    simulations._display.ballScale   = clampBallScale(simulations._display.ballScale);
     return simulations._display;
   }
 
@@ -2630,19 +2662,24 @@ box.appendChild(delBtn);
     else pos = getBallPositionForSequence(currentSeq);
     if (ballPos) pos = ballPos;
 
+    const ballScale = clampBallScale(getDisplay().ballScale || 1);
+    const baseBallSize = 28;
+    const ballSize = baseBallSize * ballScale;
+    const baseHit = Math.max(18, 22 * ballScale);
+
     const group = document.createElementNS(svg.namespaceURI, "g");
     group.classList.add("kas-ball-group");
 
     const hit = document.createElementNS(svg.namespaceURI, "circle");
-    hit.setAttribute("r", 22);
+    hit.setAttribute("r", baseHit);
     hit.setAttribute("fill", "transparent");
     hit.setAttribute("pointer-events", "fill");
     group.appendChild(hit);
 
     const img = document.createElementNS(svg.namespaceURI, "image");
     img.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/" + ballSprite);
-    img.setAttribute("width", 28);
-    img.setAttribute("height", 28);
+    img.setAttribute("width", ballSize);
+    img.setAttribute("height", ballSize);
     img.classList.add("ballon");
     img.style.cursor = "pointer";
     group.appendChild(img);
@@ -2652,15 +2689,15 @@ box.appendChild(delBtn);
       const off = visualOffset || {x:0, y:0};
       hit.setAttribute("cx", x);
       hit.setAttribute("cy", y);
-      img.setAttribute("x", x - 14 + off.x);
-      img.setAttribute("y", y - 14 + off.y);
+      img.setAttribute("x", x - (ballSize/2) + off.x);
+      img.setAttribute("y", y - (ballSize/2) + off.y);
     }
 
     applyBallRender(pos.x, pos.y);
 
     let draggingBall = false, moved = false, startX = 0, startY = 0, orig = { ...pos }, lastPos = { ...pos };
     const dragThreshold = 4;
-    const visualOffset = {x:0, y:-6};
+    const visualOffset = {x:0, y:-6 * ballScale};
 
     const endDrag = (ev) => {
       if (!draggingBall) return;
@@ -3471,10 +3508,12 @@ if (style==="rond"){
     }
 
     const bp = getBallPositionForSequence(seqIndex);
+    const ballScale = clampBallScale(getDisplay().ballScale||1);
+    const ballSize = 28 * ballScale;
     const ball = document.createElementNS(svgNS, "image");
     ball.setAttributeNS(xlink,"href", pluginUrl+"assets/"+ballSprite);
-    ball.setAttribute("x", bp.x-14); ball.setAttribute("y", bp.y-14);
-    ball.setAttribute("width", "28"); ball.setAttribute("height","28");
+    ball.setAttribute("x", bp.x - ballSize/2); ball.setAttribute("y", bp.y - ballSize/2);
+    ball.setAttribute("width", String(ballSize)); ball.setAttribute("height", String(ballSize));
     root.appendChild(ball);
     return root;
   }
@@ -3778,7 +3817,9 @@ for (let i=0;i<positions.length;i++){
     }
 
     // Ballon
-    ctx.drawImage(assets.ball, ballPos.x - 14, ballPos.y - 14, 28, 28);
+    const ballScale = clampBallScale(getDisplay().ballScale||1);
+    const ballSize = 28 * ballScale;
+    ctx.drawImage(assets.ball, ballPos.x - ballSize/2, ballPos.y - ballSize/2, ballSize, ballSize);
   }
 
   async function animatePhaseCanvas(seqIndex, positionsIn, ctx, assets, fps, showArrows, phaseVal, initialBallPos){
