@@ -1269,6 +1269,55 @@ function normalizeSequenceSpritesForCurrentSim(){
   sim.sequences.forEach((_, idx)=> ensureSeqSprites(idx));
 }
 /* === FIN INSERTION === */
+function removePlayerAtIndex(index){
+  const sim = simulations[currentSim];
+  if (!sim || !Array.isArray(sim.initialPositions)) return;
+  if (index < 0 || index >= sim.initialPositions.length) return;
+
+  sim.initialPositions.splice(index, 1);
+  if (Array.isArray(sim.playerConfigs)) sim.playerConfigs.splice(index, 1);
+  playerConfigs = sim.playerConfigs || [];
+
+  (sim.sequences || []).forEach(seq => {
+    if (Array.isArray(seq.sprites)) seq.sprites.splice(index, 1);
+    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(index, 1);
+
+    if (Array.isArray(seq.arrows)) {
+      seq.arrows = seq.arrows
+        .filter(a => a.playerIndex !== index)
+        .map(a => {
+          if (a.playerIndex != null && a.playerIndex > index) {
+            return { ...a, playerIndex: a.playerIndex - 1 };
+          }
+          return a;
+        });
+    }
+
+    if (Array.isArray(seq.annotations)) {
+      seq.annotations = seq.annotations
+        .map(ann => {
+          if (ann.kind === "highlight" && ann.playerIndex != null) {
+            if (ann.playerIndex === index) return null;
+            if (ann.playerIndex > index) return { ...ann, playerIndex: ann.playerIndex - 1 };
+          } else if (ann.kind === "connect" && Array.isArray(ann.pair)) {
+            if (ann.pair.includes(index)) return null;
+            const pair = ann.pair.map(p => (p > index ? p - 1 : p));
+            return { ...ann, pair };
+          }
+          return ann;
+        })
+        .filter(Boolean);
+    }
+  });
+
+  saveSimulations();
+  drawField();
+  createPlayers();
+  drawPlayerConfigUI();
+  drawAnnotations();
+  drawArrows();
+  drawBall();
+}
 
   function drawPlayerConfigUI() {
     if (!configContainer) return;
@@ -1460,13 +1509,7 @@ delBtn.innerHTML = `
   </svg>
 `;
 delBtn.onclick = () => {
-  simulations[currentSim].initialPositions.splice(i, 1);
-  simulations[currentSim].playerConfigs.splice(i, 1);
-  (simulations[currentSim].sequences||[]).forEach(seq=>{
-    if (Array.isArray(seq.sprites)) seq.sprites.splice(i,1);
-    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(i,1);
-  });
-  saveSimulations(); createPlayers(); drawPlayerConfigUI();
+  removePlayerAtIndex(i);
 };
 box.appendChild(delBtn);
 
