@@ -3594,29 +3594,55 @@ if (style==="rond"){
   }
 
   /* ================= Vidéo Canvas (fluide) – phases + delays ================= */
-  async function loadImageAbs(url){ return await new Promise((ok,ko)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=ko; i.src=url; }); }
+  async function loadImageAbs(url){
+    return await new Promise((ok,ko)=>{
+      const i=new Image();
+      i.onload=()=>{
+        if (i.decode) {
+          i.decode().catch(()=>{}).finally(()=>ok(i));
+        } else {
+          ok(i);
+        }
+      };
+      i.onerror=()=>ko(new Error(`Echec chargement asset: ${url}`));
+      i.src=url;
+    });
+  }
+  async function loadImageWithFallback(url, fallbackUrl){
+    try {
+      return await loadImageAbs(url);
+    } catch(err){
+      console.warn(`[kas] Asset manquant, fallback sur face: ${url}`, err);
+      if (fallbackUrl && url !== fallbackUrl) {
+        try { return await loadImageAbs(fallbackUrl); }
+        catch(fbErr){ console.error("[kas] Fallback face indisponible", fbErr); throw fbErr; }
+      }
+      throw err;
+    }
+  }
   async function preloadCanvasAssetsForSeq(seqIndex){
     const terrainUrl = pluginUrl + "assets/terrain 1 avec foule.png";
     const ballUrl    = pluginUrl + "assets/" + ballSprite;
     const positions = getPositionsAtSequenceStart(seqIndex);
     ensurePlayerConfigs();
     const spriteUrls = new Set();
+    const fallbackUrl = pluginUrl + "assets/" + fallbackSprite;
+    spriteUrls.add(fallbackUrl); // toujours disponible pour fallback
     for (let i=0;i<positions.length;i++){
       const conf = playerConfigs[i]||{};
       if ((conf.style||getDisplay().defaultStyle||"silhouette")==="silhouette"){
-        const s = effSeqSprite(conf, seqIndex, i) || playerSprites[0].src;
+        const s = effSeqSprite(conf, seqIndex, i) || fallbackSprite;
         spriteUrls.add(pluginUrl + "assets/" + s);
       }
     }
-    const allUrls = [terrainUrl, ballUrl, ...spriteUrls];
-    const results = await Promise.all(allUrls.map(u=>loadImageAbs(u)));
-    const assets = { terrain: results[0], ball: results[1], sprites: {} };
-    let idx=2;
-    for (const su of spriteUrls) { assets.sprites[su] = results[idx++]; }
+    const assets = { terrain: null, ball: null, sprites: {} };
+    assets.terrain = await loadImageWithFallback(terrainUrl, terrainUrl);
+    assets.ball    = await loadImageWithFallback(ballUrl, ballUrl);
+    for (const su of spriteUrls) { assets.sprites[su] = await loadImageWithFallback(su, fallbackUrl); }
     return assets;
   }
 
-  function startCanvasRecorder(canvas, fps = 50){
+  function startCanvasRecorder(canvas, fps = 60){
     const stream = canvas.captureStream(fps);
     let mime = 'video/webm;codecs=vp9';
     if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
@@ -3637,7 +3663,7 @@ if (style==="rond"){
         rec.stop();
       });
     }
-    rec.start(100);
+    rec.start(Math.round(1000 / fps));
     return { rec, stopAndSave };
   }
 
@@ -3731,8 +3757,9 @@ for (let i=0;i<positions.length;i++){
     ctx.strokeStyle="#fff"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(positions[i].x, positions[i].y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   } else {
-    const su = pluginUrl + "assets/" + effSprite(conf);
-    const img = assets.sprites[su];
+    const spriteName = effSeqSprite(conf, seqIndex, i) || fallbackSprite;
+    const su = pluginUrl + "assets/" + spriteName;
+    const img = assets.sprites[su] || assets.sprites[pluginUrl + "assets/" + fallbackSprite];
     if (img){
       const w = Math.round(64*scale), h = Math.round(64*scale);
       ctx.drawImage(img, positions[i].x - w/2, positions[i].y - (h*0.72), w, h);
@@ -3778,10 +3805,14 @@ for (let i=0;i<positions.length;i++){
 
     const frameMs = 1000 / fps;
     let elapsed = 0;
+    let lastTime = performance.now();
 
     return await new Promise(resolve=>{
       const tick = ()=>{
-        elapsed += frameMs;
+        const now = performance.now();
+        const delta = now - lastTime;
+        lastTime = now;
+        elapsed += Math.max(frameMs*0.5, Math.min(delta || frameMs, frameMs*1.5));
         let running = false;
 
         steps.forEach(s=>{
@@ -3815,7 +3846,7 @@ for (let i=0;i<positions.length;i++){
     });
   }
 
-  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 50, showArrows = true){
+  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 60, showArrows = true){
     let positions = JSON.parse(JSON.stringify(startPositions));
     const arrows = (simulations[currentSim]?.sequences?.[seqIndex]?.arrows || []).map(a=>({
       ...a, phase: (typeof a.phase==="number"?a.phase:0)
@@ -3838,13 +3869,13 @@ for (let i=0;i<positions.length;i++){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const { stopAndSave } = startCanvasRecorder(canvas, 50);
-
     const assets = await preloadCanvasAssetsForSeq(currentSeq);
     let positions = getPositionsAtSequenceStart(currentSeq);
-    // premier frame
-    drawFrameCanvas(ctx, assets, positions, (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1)), currentSeq, {showArrows});
-    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 50, showArrows);
+    const initialBall = (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1));
+    // premier frame (assets déjà prêts)
+    drawFrameCanvas(ctx, assets, positions, initialBall, currentSeq, {showArrows});
+    const { stopAndSave } = startCanvasRecorder(canvas, 60);
+    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 60, showArrows);
 
     const simName = currentSim || "Simulation";
     const seqName = (simulations[currentSim]?.sequences?.[currentSeq]?.name) || `Sequence-${currentSeq + 1}`;
@@ -3859,15 +3890,15 @@ for (let i=0;i<positions.length;i++){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const { stopAndSave } = startCanvasRecorder(canvas, 50);
-
     let positions = getPositionsAtSequenceStart(0);
+    const { stopAndSave } = startCanvasRecorder(canvas, 60);
 
     for (let i=0;i<seqs.length;i++){
       const assets = await preloadCanvasAssetsForSeq(i);
-      drawFrameCanvas(ctx, assets, positions, (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1)), i, {showArrows});
+      const initialBall = (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1));
+      drawFrameCanvas(ctx, assets, positions, initialBall, i, {showArrows});
       await new Promise(r=>setTimeout(r,120));
-      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 50, showArrows);
+      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 60, showArrows);
       await new Promise(r=>setTimeout(r,120));
     }
 
