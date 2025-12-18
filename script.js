@@ -1264,12 +1264,13 @@ function normalizeSequenceSpritesForCurrentSim(){
     if (!seq) return [];
     const len = (typeof targetLen === "number") ? targetLen : (simulations[currentSim]?.initialPositions?.length || 0);
     if (!Array.isArray(seq.arrowPresets)) seq.arrowPresets = [];
-    while (seq.arrowPresets.length < len) seq.arrowPresets.push({ vitesse: 900, phase: 0, delayMs: 0 });
+    while (seq.arrowPresets.length < len) seq.arrowPresets.push({ vitesse: 900, phase: 0, delayMs: 0, type: "move_player" });
     if (seq.arrowPresets.length > len) seq.arrowPresets = seq.arrowPresets.slice(0, len);
     seq.arrowPresets = seq.arrowPresets.map(preset => ({
       vitesse: clampNumber(preset?.vitesse, 200, 6000, 900),
       phase: clampNumber(preset?.phase, 0, 99, 0),
       delayMs: clampNumber(preset?.delayMs, 0, 5000, 0),
+      type: (typeof preset?.type === "string" && preset.type) ? preset.type : "move_player",
     }));
     return seq.arrowPresets;
   }
@@ -1517,6 +1518,22 @@ function normalizeSequenceSpritesForCurrentSim(){
       delayInput.className = "kas-mini-input";
       delayInput.value = preset.delayMs ?? 0;
 
+      const typeSelect = document.createElement("select");
+      typeSelect.className = "kas-mini-select kas-mini-type";
+      [
+        { value: "move_player", label: "Déplacement" },
+        { value: "dribble", label: "Conduite" },
+        { value: "pass_ground", label: "Passe sol" },
+        { value: "pass_air", label: "Passe air" },
+        { value: "shoot_ground", label: "Tir sol" },
+        { value: "shoot_air", label: "Tir air" },
+      ].forEach(optData => {
+        const opt = document.createElement("option");
+        opt.value = optData.value; opt.textContent = optData.label;
+        typeSelect.appendChild(opt);
+      });
+      typeSelect.value = arrow?.type || preset.type || "move_player";
+
       const status = document.createElement("span");
       status.className = "kas-timing-status";
       status.textContent = arrow ? "Flèche active" : "Aucune flèche";
@@ -1529,16 +1546,19 @@ function normalizeSequenceSpritesForCurrentSim(){
         const speedVal = clampNumber(parseInt(speedInput.value, 10), 200, 6000, basePreset.vitesse || 900);
         const phaseVal = clampNumber(parseInt(phaseInput.value, 10), 0, 99, basePreset.phase || 0);
         const delayVal = clampNumber(parseInt(delayInput.value, 10), 0, 5000, basePreset.delayMs || 0);
-        presets[i] = { vitesse: speedVal, phase: phaseVal, delayMs: delayVal };
+        const typeVal = typeSelect.value || basePreset.type || "move_player";
+        presets[i] = { vitesse: speedVal, phase: phaseVal, delayMs: delayVal, type: typeVal };
         const arr = (seqObj.arrows || []).find(a => a.playerIndex === i);
         if (arr) {
-          arr.vitesse = speedVal; arr.phase = phaseVal; arr.delayMs = delayVal;
+          arr.vitesse = speedVal; arr.phase = phaseVal; arr.delayMs = delayVal; arr.type = typeVal;
         }
         saveSimulations();
         drawArrows();
+        typeSelect.value = typeVal;
+        status.textContent = arr ? "Flèche active" : "Aucune flèche";
       };
 
-      [speedInput, phaseInput, delayInput].forEach(inp => inp.addEventListener("change", applyTimingChange));
+      [speedInput, phaseInput, delayInput, typeSelect].forEach(inp => inp.addEventListener("change", applyTimingChange));
 
       const delArrowBtn = document.createElement("button");
       delArrowBtn.className = "kas-btn kas-btn-ghost";
@@ -1553,17 +1573,21 @@ function normalizeSequenceSpritesForCurrentSim(){
         const speedVal = clampNumber(parseInt(speedInput.value, 10), 200, 6000, basePreset.vitesse || 900);
         const phaseVal = clampNumber(parseInt(phaseInput.value, 10), 0, 99, basePreset.phase || 0);
         const delayVal = clampNumber(parseInt(delayInput.value, 10), 0, 5000, basePreset.delayMs || 0);
-        presets[i] = { vitesse: speedVal, phase: phaseVal, delayMs: delayVal };
+        const typeVal = typeSelect.value || basePreset.type || "move_player";
+        presets[i] = { vitesse: speedVal, phase: phaseVal, delayMs: delayVal, type: typeVal };
         seqObj.arrows = (seqObj.arrows || []).filter(a => a.playerIndex !== i);
         saveSimulations();
         drawArrows();
         drawBall();
+        status.textContent = "Aucune flèche";
+        delArrowBtn.disabled = true;
         drawPlayerConfigUI();
       };
 
-      timingCell.append("Vitesse:", speedInput, " ms | Vague:", phaseInput, " | Décalage:", delayInput, " ms | ");
-      timingCell.appendChild(delArrowBtn);
-      timingCell.appendChild(status);
+      const timingInner = document.createElement("div");
+      timingInner.className = "kas-timing-inner";
+      timingInner.append(typeSelect, " Vitesse:", speedInput, " ms | Vague:", phaseInput, " | Décalage:", delayInput, " ms | ", delArrowBtn, status);
+      timingCell.appendChild(timingInner);
 
       const actionCell = document.createElement("div");
       actionCell.className = "ks-actions-cell";
@@ -1912,7 +1936,10 @@ function normalizeSequenceSpritesForCurrentSim(){
     const startY = startPos.y;
 
     const selectType = document.getElementById("arrow-type-select");
-    const arrowType = selectType ? selectType.value : "move_player";
+    const seqForPreset = simulations[currentSim]?.sequences?.[currentSeq];
+    const presets = seqForPreset ? ensureArrowPresetsForSequence(seqForPreset) : [];
+    const presetType = (playerIndex != null && presets[playerIndex]) ? presets[playerIndex].type : null;
+    const arrowType = presetType || (selectType ? selectType.value : "move_player");
     const color = getColorByType(arrowType);
 
     let currentLine = document.createElementNS(svg.namespaceURI, "line");
@@ -2724,6 +2751,7 @@ function normalizeSequenceSpritesForCurrentSim(){
           vitesse: clampNumber(stored.vitesse, 200, 6000, 900),
           phase: clampNumber(stored.phase, 0, 99, 0),
           delayMs: clampNumber(stored.delayMs, 0, 5000, 0),
+          type: stored.type || "move_player",
         };
       }
       seq.arrows.splice(index, 1);
@@ -2741,7 +2769,7 @@ function normalizeSequenceSpritesForCurrentSim(){
 
       const seq = simulations[currentSim].sequences[currentSeq];
       const presets = ensureArrowPresetsForSequence(seq);
-      if (arrow.playerIndex != null) presets[arrow.playerIndex] = { vitesse: vit, phase: ph, delayMs: del };
+      if (arrow.playerIndex != null) presets[arrow.playerIndex] = { vitesse: vit, phase: ph, delayMs: del, type }; 
 
       saveSimulations(); drawArrows(); drawBall(); drawPlayerConfigUI();
       popupDiv.style.display = "none";

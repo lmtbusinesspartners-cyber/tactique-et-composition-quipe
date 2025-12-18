@@ -392,7 +392,19 @@ button[data-active="1"] {
     align-items: center;
     gap: 4px;
     flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
     font-size: 12px;
+}
+.kas-timing-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    min-width: min(960px, 100%);
+}
+.kas-mini-select.kas-mini-type {
+    min-width: 140px;
 }
 .kas-timing-status {
     font-size: 11px;
