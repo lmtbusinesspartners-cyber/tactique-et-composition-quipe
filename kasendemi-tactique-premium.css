@@ -333,3 +333,91 @@ button[data-active="1"] {
     color: #212b44;
     font-weight: 700;
 }
+
+/* Liste joueurs compacte : 1 joueur = 1 ligne */
+.ks-player-grid {
+    display: grid;
+    grid-template-columns: 0.5fr 1.4fr 1.6fr 1.2fr 2.4fr 0.7fr;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.ks-player-header {
+    font-weight: 700;
+    font-size: 12px;
+    color: #1d1d1d;
+    padding: 4px 6px;
+    margin-bottom: 6px;
+}
+.ks-player-row {
+    background: #f8f8fa;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+.ks-flex-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
+}
+.kas-mini-input {
+    width: 70px;
+    padding: 3px 6px;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+}
+.kas-mini-input.kas-mini-name {
+    width: 120px;
+    text-align: left;
+}
+.kas-mini-select {
+    min-width: 120px;
+    max-width: 180px;
+    font-size: 12px;
+    padding: 4px 6px;
+}
+.kas-mini-color {
+    width: 42px;
+    height: 32px;
+    padding: 0;
+    border: none;
+    background: transparent;
+}
+.kas-timing-line {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: nowrap;
+    font-size: 12px;
+}
+.kas-timing-status {
+    font-size: 11px;
+    color: #555;
+    margin-left: 6px;
+}
+.kas-btn-ghost {
+    background: transparent;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.kas-btn-ghost:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+.ks-muted-label {
+    font-size: 11px;
+    color: #666;
+}
+.ks-cell-index {
+    font-weight: 700;
+}
+.ks-actions-cell .kas-btn {
+    min-width: 36px;
+}

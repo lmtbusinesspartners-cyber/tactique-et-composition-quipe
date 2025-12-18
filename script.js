@@ -974,7 +974,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
     simulations = {
       "Simulation 1": {
         initialPositions: [],
-        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [] }],
+        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [], arrowPresets: [] }],
         playerConfigs: [],
       },
       _display: { playerScale:0.8, labelMode:"numero", labelShadow:true, defaultStyle:"silhouette", defaultCircleColor:"#00bfff" }
@@ -991,6 +991,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
       if (typeof seq.comment !== "string") seq.comment = "";
       if (typeof seq.ballPosFinal === "undefined") seq.ballPosFinal = null;
       if (!Array.isArray(seq.sprites)) seq.sprites = [];
+      if (!Array.isArray(seq.arrowPresets)) seq.arrowPresets = [];
       (seq.arrows||[]).forEach(a=>{ if (typeof a.phase!=="number") a.phase=0; if (typeof a.delayMs!=="number") a.delayMs=0; });
     });
   });
@@ -1168,9 +1169,11 @@ reorderDockPanels();           // impose l'ordre final des blocs
     if (!simulations[currentSim].playerConfigs) simulations[currentSim].playerConfigs = [];
     playerConfigs = simulations[currentSim].playerConfigs;
     normalizeSequenceSpritesForCurrentSim();
+    normalizeSequenceArrowPresetsForCurrentSim();
   }
   function saveSimulations() {
     normalizeSequenceSpritesForCurrentSim();
+    normalizeSequenceArrowPresetsForCurrentSim();
     simulations[currentSim].playerConfigs = playerConfigs;
     saveSimulationsToLocal(simulations);
     saveSimulationsToServer(simulations);
@@ -1251,202 +1254,353 @@ function normalizeSequenceSpritesForCurrentSim(){
 }
 /* === FIN INSERTION === */
 
+  function clampNumber(val, min, max, fallback){
+    const n = (typeof val === "number") ? val : parseFloat(val);
+    if (Number.isFinite(n)) return Math.min(max, Math.max(min, n));
+    return fallback;
+  }
+
+  function ensureArrowPresetsForSequence(seq, targetLen){
+    if (!seq) return [];
+    const len = (typeof targetLen === "number") ? targetLen : (simulations[currentSim]?.initialPositions?.length || 0);
+    if (!Array.isArray(seq.arrowPresets)) seq.arrowPresets = [];
+    while (seq.arrowPresets.length < len) seq.arrowPresets.push({ vitesse: 900, phase: 0, delayMs: 0 });
+    if (seq.arrowPresets.length > len) seq.arrowPresets = seq.arrowPresets.slice(0, len);
+    seq.arrowPresets = seq.arrowPresets.map(preset => ({
+      vitesse: clampNumber(preset?.vitesse, 200, 6000, 900),
+      phase: clampNumber(preset?.phase, 0, 99, 0),
+      delayMs: clampNumber(preset?.delayMs, 0, 5000, 0),
+    }));
+    return seq.arrowPresets;
+  }
+
+  function normalizeSequenceArrowPresetsForCurrentSim(){
+    const sim = simulations[currentSim];
+    if (!sim || !sim.sequences) return;
+    const targetLen = sim.initialPositions?.length || 0;
+    sim.sequences.forEach(seq => ensureArrowPresetsForSequence(seq, targetLen));
+  }
+
   function drawPlayerConfigUI() {
     if (!configContainer) return;
     configContainer.innerHTML = "";
     ensurePlayerConfigs();
+    normalizeSequenceArrowPresetsForCurrentSim();
+
+    const seq = simulations[currentSim]?.sequences?.[currentSeq];
+
+    const header = document.createElement("div");
+    header.className = "ks-player-grid ks-player-header";
+    ["#", "Style", "Sprite & posture", "Identification", "Timing & vitesse mouvement", "Actions"].forEach(txt => {
+      const cell = document.createElement("div");
+      cell.textContent = txt;
+      header.appendChild(cell);
+    });
+    configContainer.appendChild(header);
+
     for (let i = 0; i < playerConfigs.length; i++) {
       const conf = playerConfigs[i];
       if (typeof conf.style === "undefined") conf.style = getDisplay().defaultStyle || "silhouette";
       if (typeof conf.circleColor === "undefined") conf.circleColor = getDisplay().defaultCircleColor || "#00bfff";
-      if (typeof conf.num === "undefined") conf.num = i+1;
+      if (typeof conf.num === "undefined") conf.num = i + 1;
       if (typeof conf.name === "undefined") conf.name = "";
+      if (typeof conf.overrideStyle === "undefined") conf.overrideStyle = false;
 
-      const box = document.createElement("div");
-      box.style.background = "#f8f8fa"; box.style.borderRadius = "8px"; box.style.padding = "6px 8px";
-      box.style.margin = "3px 3px"; box.style.display = "inline-flex"; box.style.alignItems="center"; box.style.gap="6px";
-      box.style.fontSize = "12px";
-      box.innerHTML = `<span style="font-weight:700;">${i + 1}</span>`;
+      const row = document.createElement("div");
+      row.className = "ks-player-grid ks-player-row";
 
-// --- Style (hérite du global sauf si "Perso" coché) ---
-if (typeof conf.overrideStyle === "undefined") conf.overrideStyle = false;
+      const indexCell = document.createElement("div");
+      indexCell.className = "ks-cell-index";
+      indexCell.textContent = `${i + 1}`;
+      row.appendChild(indexCell);
 
-// interrupteur "Perso"
-const chkOverride = document.createElement("input");
-chkOverride.type = "checkbox";
-chkOverride.checked = !!conf.overrideStyle;
-chkOverride.title = "Personnaliser le style pour ce joueur (sinon, hérite du style par défaut)";
-  chkOverride.onchange = () => {
-    playerConfigs[i].overrideStyle = !!chkOverride.checked;
-    // -- synchroniser l'état des champs immédiatement :
-    const isPerso = !!chkOverride.checked;
-    selStyle.disabled = !isPerso;
-    const styleEff = isPerso ? (selStyle.value) : (getDisplay().defaultStyle || "silhouette");
-    colorCircle.disabled = !(isPerso ? (styleEff==="rond")       : (styleEff==="rond"));
+      const styleCell = document.createElement("div");
+      styleCell.className = "ks-flex-row";
 
-    syncSpriteDisabled();
-    saveSimulations();
-    createPlayers();
-  };
-box.appendChild(chkOverride);
-{
-  const lbl = document.createElement("span");
-  lbl.textContent = " Perso";
-  lbl.style.marginRight = "6px";
-  lbl.style.opacity = .8;
-  box.appendChild(lbl);
-}
+      const chkOverride = document.createElement("input");
+      chkOverride.type = "checkbox";
+      chkOverride.checked = !!conf.overrideStyle;
+      chkOverride.title = "Personnaliser le style pour ce joueur (sinon, hérite du style par défaut)";
 
-// sélecteur style
-const selStyle = document.createElement("select");
-["silhouette","rond"].forEach(s=>{
-  const opt=document.createElement("option");
-  opt.value=s; opt.textContent=s[0].toUpperCase()+s.slice(1);
-  selStyle.appendChild(opt);
-});
-const globalStyle = getDisplay().defaultStyle || "silhouette";
-selStyle.value = (conf.overrideStyle ? (conf.style || globalStyle) : globalStyle);
-selStyle.disabled = !conf.overrideStyle;
-selStyle.onchange = () => { playerConfigs[i].style = selStyle.value; saveSimulations(); createPlayers(); };
-box.appendChild(selStyle);
+      const overrideLbl = document.createElement("span");
+      overrideLbl.textContent = "Perso";
+      overrideLbl.className = "ks-muted-label";
 
-// Sprite (si silhouette)
-const selFamily = document.createElement("select");
-spriteFamilies.forEach(f => {
-  const opt = document.createElement("option");
-  opt.value = f.id;
-  opt.textContent = f.mainLabel;
-  selFamily.appendChild(opt);
-});
+      const selStyle = document.createElement("select");
+      selStyle.className = "kas-mini-select";
+      ["silhouette", "rond"].forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = s; opt.textContent = s[0].toUpperCase() + s.slice(1);
+        selStyle.appendChild(opt);
+      });
+      const globalStyle = getDisplay().defaultStyle || "silhouette";
+      selStyle.value = (conf.overrideStyle ? (conf.style || globalStyle) : globalStyle);
+      selStyle.disabled = !conf.overrideStyle;
+      selStyle.onchange = () => { playerConfigs[i].style = selStyle.value; saveSimulations(); createPlayers(); drawPlayerConfigUI(); };
 
-const selPose = document.createElement("select");
-const ensureFamily = (fid) => spriteFamilies.find(f => f.id === fid) || spriteFamilies.find(f => f.id === fallbackFamilyId) || spriteFamilies[0];
-const updatePoseOptions = (fid, preferredSprite) => {
-  const fam = ensureFamily(fid);
-  if (!fam) return;
-  selPose.innerHTML = "";
-  const baseName = fam.mainLabel.replace(/\s+Face$/i, "");
-  fam.variants.forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = v.src;
-    opt.textContent = `${baseName} ${v.label}`;
-    selPose.appendChild(opt);
-  });
-  const chosenSprite = fam.variants.find(v => v.src === preferredSprite)?.src || fam.variants[0]?.src || fallbackSprite;
-  selPose.value = chosenSprite;
-  if (!validSpriteSet.has(conf.sprite) || conf.sprite !== chosenSprite) {
-    playerConfigs[i].sprite = chosenSprite;
-  }
-};
+      const colorCircle = document.createElement("input");
+      colorCircle.type = "color";
+      colorCircle.className = "kas-mini-color";
+      colorCircle.value = conf.circleColor || getDisplay().defaultCircleColor || "#00bfff";
+      colorCircle.onchange = () => { playerConfigs[i].circleColor = colorCircle.value; saveSimulations(); createPlayers(); };
+      colorCircle.disabled = !(conf.overrideStyle ? (selStyle.value === "rond") : (globalStyle === "rond"));
 
-const spriteValue = validSpriteSet.has(conf.sprite) ? conf.sprite : fallbackSprite;
-const initialFamily = spriteToFamily.get(spriteValue) || fallbackFamilyId;
-selFamily.value = initialFamily;
-updatePoseOptions(initialFamily, spriteValue);
+      const syncColorDisabled = () => {
+        colorCircle.disabled = !(playerConfigs[i].overrideStyle ? (selStyle.value === "rond") : (globalStyle === "rond"));
+      };
 
-const seqPose = document.createElement("select");
-const updateSeqPoseOptions = (fid) => {
-  const fam = ensureFamily(fid);
-  if (!fam) return;
-  seqPose.innerHTML = "";
-  const inherit = document.createElement("option");
-  inherit.value = "";
-  inherit.textContent = "Posture séquence (défaut)";
-  seqPose.appendChild(inherit);
-  const baseName = fam.mainLabel.replace(/\s+Face$/i, "");
-  fam.variants.forEach(v => {
-    const opt = document.createElement("option");
-    opt.value = v.src;
-    opt.textContent = `${baseName} ${v.label}`;
-    seqPose.appendChild(opt);
-  });
-  const seqSprites = ensureSeqSprites(currentSeq) || [];
-  const stored = seqSprites[i];
-  const chosen = (stored && validSpriteSet.has(stored) && spriteToFamily.get(stored) === fam.id) ? stored : "";
-  seqPose.value = chosen;
-};
-updateSeqPoseOptions(initialFamily);
+      const syncSpriteDisabled = () => {
+        const isSilhouette = conf.overrideStyle ? (selStyle.value === "silhouette") : (globalStyle === "silhouette");
+        selFamily.disabled = !isSilhouette;
+        selPose.disabled = !isSilhouette;
+      };
 
-const syncSpriteDisabled = () => {
-  const isSilhouette = conf.overrideStyle ? (selStyle.value === "silhouette") : (globalStyle === "silhouette");
-  selFamily.disabled = !isSilhouette;
-  selPose.disabled = !isSilhouette;
-};
+      chkOverride.onchange = () => {
+        playerConfigs[i].overrideStyle = !!chkOverride.checked;
+        const isPerso = !!chkOverride.checked;
+        selStyle.disabled = !isPerso;
+        const styleEff = isPerso ? (selStyle.value) : (globalStyle);
+        colorCircle.disabled = !(styleEff === "rond");
+        syncSpriteDisabled();
+        saveSimulations();
+        createPlayers();
+        drawPlayerConfigUI();
+      };
 
-selFamily.onchange = () => {
-  const fam = ensureFamily(selFamily.value);
-  updatePoseOptions(fam.id, fam.variants[0]?.src);
-  updateSeqPoseOptions(fam.id);
-  const seqSprites = ensureSeqSprites(currentSeq) || [];
-  if (seqPose.value && spriteToFamily.get(seqPose.value) !== fam.id) {
-    seqPose.value = "";
-    seqSprites[i] = null;
-  }
-  saveSimulations();
-  createPlayers(undefined, currentSeq);
-};
+      styleCell.appendChild(chkOverride);
+      styleCell.appendChild(overrideLbl);
+      styleCell.appendChild(selStyle);
 
-selPose.onchange = () => {
-  playerConfigs[i].sprite = selPose.value;
-  saveSimulations();
-  createPlayers(undefined, currentSeq);
-};
+      // Sprite (si silhouette)
+      const selFamily = document.createElement("select");
+      selFamily.className = "kas-mini-select";
+      spriteFamilies.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = f.mainLabel;
+        selFamily.appendChild(opt);
+      });
 
-seqPose.onchange = () => {
-  const seqSprites = ensureSeqSprites(currentSeq) || [];
-  seqSprites[i] = seqPose.value || null;
-  saveSimulations();
-  createPlayers(undefined, currentSeq);
-};
+      const selPose = document.createElement("select");
+      selPose.className = "kas-mini-select";
+      const seqPose = document.createElement("select");
+      seqPose.className = "kas-mini-select";
 
-syncSpriteDisabled();
-selStyle.addEventListener("change", syncSpriteDisabled);
+      const ensureFamily = (fid) => spriteFamilies.find(f => f.id === fid) || spriteFamilies.find(f => f.id === fallbackFamilyId) || spriteFamilies[0];
+      const updatePoseOptions = (fid, preferredSprite) => {
+        const fam = ensureFamily(fid);
+        if (!fam) return;
+        selPose.innerHTML = "";
+        const baseName = fam.mainLabel.replace(/\s+Face$/i, "");
+        fam.variants.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v.src;
+          opt.textContent = `${baseName} ${v.label}`;
+          selPose.appendChild(opt);
+        });
+        const chosenSprite = fam.variants.find(v => v.src === preferredSprite)?.src || fam.variants[0]?.src || fallbackSprite;
+        selPose.value = chosenSprite;
+        if (!validSpriteSet.has(conf.sprite) || conf.sprite !== chosenSprite) {
+          playerConfigs[i].sprite = chosenSprite;
+        }
+      };
 
-box.appendChild(selFamily);
-box.appendChild(selPose);
-box.appendChild(seqPose);
+      const updateSeqPoseOptions = (fid) => {
+        const fam = ensureFamily(fid);
+        if (!fam) return;
+        seqPose.innerHTML = "";
+        const inherit = document.createElement("option");
+        inherit.value = "";
+        inherit.textContent = "Posture séquence (défaut)";
+        seqPose.appendChild(inherit);
+        const baseName = fam.mainLabel.replace(/\s+Face$/i, "");
+        fam.variants.forEach(v => {
+          const opt = document.createElement("option");
+          opt.value = v.src;
+          opt.textContent = `${baseName} ${v.label}`;
+          seqPose.appendChild(opt);
+        });
+        const seqSprites = ensureSeqSprites(currentSeq) || [];
+        const stored = seqSprites[i];
+        const chosen = (stored && validSpriteSet.has(stored) && spriteToFamily.get(stored) === fam.id) ? stored : "";
+        seqPose.value = chosen;
+      };
 
-// Couleur (si rond)
-const colorCircle = document.createElement("input");
-colorCircle.type="color"; colorCircle.value = conf.circleColor || getDisplay().defaultCircleColor || "#00bfff";
-colorCircle.onchange = ()=>{ playerConfigs[i].circleColor = colorCircle.value; saveSimulations(); createPlayers(); };
-colorCircle.disabled = !(conf.overrideStyle ? (selStyle.value==="rond") : (globalStyle==="rond"));
-selStyle.addEventListener("change", ()=> colorCircle.disabled = !(conf.overrideStyle ? (selStyle.value==="rond") : (globalStyle==="rond")));
-box.appendChild(colorCircle);
-     
-      // Numéro + Nom (identification)
+      const spriteValue = validSpriteSet.has(conf.sprite) ? conf.sprite : fallbackSprite;
+      const initialFamily = spriteToFamily.get(spriteValue) || fallbackFamilyId;
+      selFamily.value = initialFamily;
+      updatePoseOptions(initialFamily, spriteValue);
+      updateSeqPoseOptions(initialFamily);
+
+      selFamily.onchange = () => {
+        const fam = ensureFamily(selFamily.value);
+        updatePoseOptions(fam.id, fam.variants[0]?.src);
+        updateSeqPoseOptions(fam.id);
+        const seqSprites = ensureSeqSprites(currentSeq) || [];
+        if (seqPose.value && spriteToFamily.get(seqPose.value) !== fam.id) {
+          seqPose.value = "";
+          seqSprites[i] = null;
+        }
+        saveSimulations();
+        createPlayers(undefined, currentSeq);
+        drawPlayerConfigUI();
+      };
+
+      selPose.onchange = () => {
+        playerConfigs[i].sprite = selPose.value;
+        saveSimulations();
+        createPlayers(undefined, currentSeq);
+        drawPlayerConfigUI();
+      };
+
+      seqPose.onchange = () => {
+        const seqSprites = ensureSeqSprites(currentSeq) || [];
+        seqSprites[i] = seqPose.value || null;
+        saveSimulations();
+        createPlayers(undefined, currentSeq);
+      };
+
+      syncSpriteDisabled();
+      selStyle.addEventListener("change", syncSpriteDisabled);
+      selStyle.addEventListener("change", syncColorDisabled);
+
+      styleCell.appendChild(colorCircle);
+
+      const spriteCell = document.createElement("div");
+      spriteCell.className = "ks-flex-row";
+      spriteCell.appendChild(selFamily);
+      spriteCell.appendChild(selPose);
+      spriteCell.appendChild(seqPose);
+
+      const idCell = document.createElement("div");
+      idCell.className = "ks-flex-row";
       const numInput = document.createElement("input");
-      numInput.type = "number"; numInput.value = conf.num ?? (i+1);
-      numInput.min = 1; numInput.max = 99; numInput.style.width = "48px";
-      numInput.style.fontWeight = "700";
-      numInput.onchange = () => { playerConfigs[i].num = parseInt(numInput.value||i+1,10); saveSimulations(); createPlayers(); };
-      box.appendChild(numInput);
+      numInput.type = "number";
+      numInput.value = conf.num ?? (i + 1);
+      numInput.min = 1; numInput.max = 99;
+      numInput.className = "kas-mini-input";
+      numInput.onchange = () => { playerConfigs[i].num = parseInt(numInput.value || i + 1, 10); saveSimulations(); createPlayers(); };
 
       const nameInput = document.createElement("input");
-      nameInput.value = conf.name || ""; nameInput.placeholder = "Nom"; nameInput.style.width = "90px";
+      nameInput.value = conf.name || "";
+      nameInput.placeholder = "Nom";
+      nameInput.className = "kas-mini-input kas-mini-name";
       nameInput.onchange = () => { playerConfigs[i].name = nameInput.value; saveSimulations(); createPlayers(); };
-      box.appendChild(nameInput);
 
-      // Supprimer
+      idCell.appendChild(numInput);
+      idCell.appendChild(nameInput);
+
+      const timingCell = document.createElement("div");
+      timingCell.className = "kas-timing-line";
+      const seqPresets = seq ? ensureArrowPresetsForSequence(seq) : [];
+      const preset = seqPresets[i] || { vitesse: 900, phase: 0, delayMs: 0 };
+      const arrow = (seq?.arrows || []).find(a => a.playerIndex === i);
+      if (arrow) {
+        preset.vitesse = clampNumber(arrow.vitesse, 200, 6000, preset.vitesse);
+        preset.phase = clampNumber(arrow.phase, 0, 99, preset.phase);
+        preset.delayMs = clampNumber(arrow.delayMs, 0, 5000, preset.delayMs);
+        seqPresets[i] = { ...preset };
+      }
+
+      const speedInput = document.createElement("input");
+      speedInput.type = "number"; speedInput.min = 200; speedInput.max = 6000; speedInput.step = 50;
+      speedInput.className = "kas-mini-input";
+      speedInput.value = preset.vitesse ?? 900;
+
+      const phaseInput = document.createElement("input");
+      phaseInput.type = "number"; phaseInput.min = 0; phaseInput.max = 99; phaseInput.step = 1;
+      phaseInput.className = "kas-mini-input";
+      phaseInput.value = preset.phase ?? 0;
+
+      const delayInput = document.createElement("input");
+      delayInput.type = "number"; delayInput.min = 0; delayInput.max = 5000; delayInput.step = 50;
+      delayInput.className = "kas-mini-input";
+      delayInput.value = preset.delayMs ?? 0;
+
+      const status = document.createElement("span");
+      status.className = "kas-timing-status";
+      status.textContent = arrow ? "Flèche active" : "Aucune flèche";
+
+      const applyTimingChange = () => {
+        const seqObj = simulations[currentSim]?.sequences?.[currentSeq];
+        if (!seqObj) return;
+        const presets = ensureArrowPresetsForSequence(seqObj);
+        const basePreset = presets[i] || preset;
+        const speedVal = clampNumber(parseInt(speedInput.value, 10), 200, 6000, basePreset.vitesse || 900);
+        const phaseVal = clampNumber(parseInt(phaseInput.value, 10), 0, 99, basePreset.phase || 0);
+        const delayVal = clampNumber(parseInt(delayInput.value, 10), 0, 5000, basePreset.delayMs || 0);
+        presets[i] = { vitesse: speedVal, phase: phaseVal, delayMs: delayVal };
+        const arr = (seqObj.arrows || []).find(a => a.playerIndex === i);
+        if (arr) {
+          arr.vitesse = speedVal; arr.phase = phaseVal; arr.delayMs = delayVal;
+        }
+        saveSimulations();
+        drawArrows();
+      };
+
+      [speedInput, phaseInput, delayInput].forEach(inp => inp.addEventListener("change", applyTimingChange));
+
+      const delArrowBtn = document.createElement("button");
+      delArrowBtn.className = "kas-btn kas-btn-ghost";
+      delArrowBtn.textContent = "🗑 Suppr flèche";
+      delArrowBtn.title = "Supprimer la flèche de ce joueur dans la séquence";
+      delArrowBtn.disabled = !arrow;
+      delArrowBtn.onclick = () => {
+        const seqObj = simulations[currentSim]?.sequences?.[currentSeq];
+        if (!seqObj) return;
+        const presets = ensureArrowPresetsForSequence(seqObj);
+        const basePreset = presets[i] || preset;
+        const speedVal = clampNumber(parseInt(speedInput.value, 10), 200, 6000, basePreset.vitesse || 900);
+        const phaseVal = clampNumber(parseInt(phaseInput.value, 10), 0, 99, basePreset.phase || 0);
+        const delayVal = clampNumber(parseInt(delayInput.value, 10), 0, 5000, basePreset.delayMs || 0);
+        presets[i] = { vitesse: speedVal, phase: phaseVal, delayMs: delayVal };
+        seqObj.arrows = (seqObj.arrows || []).filter(a => a.playerIndex !== i);
+        saveSimulations();
+        drawArrows();
+        drawBall();
+        drawPlayerConfigUI();
+      };
+
+      timingCell.append("Vitesse:", speedInput, " ms | Vague:", phaseInput, " | Décalage:", delayInput, " ms | ");
+      timingCell.appendChild(delArrowBtn);
+      timingCell.appendChild(status);
+
+      const actionCell = document.createElement("div");
+      actionCell.className = "ks-actions-cell";
       const delBtn = document.createElement("button");
-delBtn.setAttribute("aria-label","Supprimer ce joueur");
-delBtn.className = "kas-btn";
-delBtn.style.padding = "4px 6px";
-delBtn.innerHTML = `
-  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-    <path d="M18.3 5.7a1 1 0 0 0-1.4 0L12 10.59 7.1 5.7A1 1 0 0 0 5.7 7.1L10.59 12 5.7 16.9a1 1 0 1 0 1.4 1.4L12 13.41l4.9 4.89a1 1 0 0 0 1.4-1.4L13.41 12l4.89-4.9a1 1 0 0 0 0-1.4Z" fill="currentColor"/>
-  </svg>
-`;
-delBtn.onclick = () => {
-  simulations[currentSim].initialPositions.splice(i, 1);
-  simulations[currentSim].playerConfigs.splice(i, 1);
-  (simulations[currentSim].sequences||[]).forEach(seq=>{ if (Array.isArray(seq.sprites)) seq.sprites.splice(i,1); });
-  saveSimulations(); createPlayers(); drawPlayerConfigUI();
-};
-box.appendChild(delBtn);
+      delBtn.setAttribute("aria-label", "Supprimer ce joueur");
+      delBtn.className = "kas-btn";
+      delBtn.textContent = "✖";
+      delBtn.onclick = () => {
+        const sim = simulations[currentSim];
+        if (!sim) return;
+        sim.initialPositions.splice(i, 1);
+        sim.playerConfigs.splice(i, 1);
+        (sim.sequences || []).forEach(seqItem => {
+          if (Array.isArray(seqItem.sprites)) seqItem.sprites.splice(i, 1);
+          if (Array.isArray(seqItem.arrowPresets)) seqItem.arrowPresets.splice(i, 1);
+          if (Array.isArray(seqItem.arrows)) {
+            seqItem.arrows = seqItem.arrows
+              .filter(a => a.playerIndex !== i)
+              .map(a => (a.playerIndex != null && a.playerIndex > i) ? { ...a, playerIndex: a.playerIndex - 1 } : a);
+          }
+        });
+        saveSimulations();
+        drawField();
+        createPlayers();
+        drawArrows();
+        drawBall();
+        drawPlayerConfigUI();
+      };
+      actionCell.appendChild(delBtn);
 
+      row.appendChild(styleCell);
+      row.appendChild(spriteCell);
+      row.appendChild(idCell);
+      row.appendChild(timingCell);
+      row.appendChild(actionCell);
 
-      configContainer.appendChild(box);
+      configContainer.appendChild(row);
     }
   }
 
@@ -1814,9 +1968,13 @@ box.appendChild(delBtn);
       const seq = simulations[currentSim].sequences[currentSeq];
       if (!seq.arrows) seq.arrows = [];
 
+      const presets = ensureArrowPresetsForSequence(seq);
+      const basePreset = (playerIndex != null && presets[playerIndex]) ? presets[playerIndex] : { vitesse: 900, phase: 0, delayMs: 0 };
+
       if (playerIndex != null) {
         const idx = seq.arrows.findIndex(a => a.playerIndex === playerIndex);
         if (idx !== -1) seq.arrows.splice(idx, 1);
+        presets[playerIndex] = presets[playerIndex] || { vitesse: 900, phase: 0, delayMs: 0 };
       }
 
       seq.arrows.push({
@@ -1825,12 +1983,12 @@ box.appendChild(delBtn);
         x2: endX, y2: endY,
         type: arrowType,
         playerIndex,
-        vitesse: 900,
-        phase: 0,
-        delayMs: 0
+        vitesse: clampNumber(basePreset.vitesse, 200, 6000, 900),
+        phase: clampNumber(basePreset.phase, 0, 99, 0),
+        delayMs: clampNumber(basePreset.delayMs, 0, 5000, 0)
       });
       saveSimulations();
-      drawArrows(); drawBall();
+      drawArrows(); drawBall(); drawPlayerConfigUI();
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd);
@@ -2558,8 +2716,18 @@ box.appendChild(delBtn);
     console.log("[DEBUG POPUP] Popup affiché à:", posX, posY, "display:", popupDiv.style.display);
 
     popupDiv.querySelector(".kas-arrow-delete").onclick = () => {
-      simulations[currentSim].sequences[currentSeq].arrows.splice(index, 1);
-      saveSimulations(); drawArrows(); drawBall();
+      const seq = simulations[currentSim].sequences[currentSeq];
+      const presets = ensureArrowPresetsForSequence(seq);
+      const stored = seq.arrows[index];
+      if (stored && stored.playerIndex != null) {
+        presets[stored.playerIndex] = {
+          vitesse: clampNumber(stored.vitesse, 200, 6000, 900),
+          phase: clampNumber(stored.phase, 0, 99, 0),
+          delayMs: clampNumber(stored.delayMs, 0, 5000, 0),
+        };
+      }
+      seq.arrows.splice(index, 1);
+      saveSimulations(); drawArrows(); drawBall(); drawPlayerConfigUI();
       popupDiv.style.display = "none";
     };
     popupDiv.querySelector("#kasArrowCancel").onclick = () => { popupDiv.style.display = "none"; };
@@ -2571,7 +2739,11 @@ box.appendChild(delBtn);
 
       arrow.type = type; arrow.vitesse = vit; arrow.phase = ph; arrow.delayMs = del;
 
-      saveSimulations(); drawArrows(); drawBall();
+      const seq = simulations[currentSim].sequences[currentSeq];
+      const presets = ensureArrowPresetsForSequence(seq);
+      if (arrow.playerIndex != null) presets[arrow.playerIndex] = { vitesse: vit, phase: ph, delayMs: del };
+
+      saveSimulations(); drawArrows(); drawBall(); drawPlayerConfigUI();
       popupDiv.style.display = "none";
     };
 
@@ -2729,7 +2901,7 @@ box.appendChild(delBtn);
       clearArrowsBtn.onclick = function () {
         if (!confirm("Supprimer toutes les flèches de cette séquence ?")) return;
         simulations[currentSim].sequences[currentSeq].arrows = [];
-        saveSimulations(); drawArrows(); drawBall();
+        saveSimulations(); drawArrows(); drawBall(); drawPlayerConfigUI();
       };
 
     if (showSeqStartBtn)
@@ -2767,7 +2939,12 @@ box.appendChild(delBtn);
       if (!sim.playerConfigs)    sim.playerConfigs    = [];
       sim.initialPositions.push({ x: 450, y: 300 });
       sim.playerConfigs.push({ style:getDisplay().defaultStyle||"silhouette", circleColor:getDisplay().defaultCircleColor||"#00bfff", sprite: playerSprites[0].src, posture: "statique", skin: skins[0].color, num: sim.playerConfigs.length+1, name:"" });
-      (sim.sequences||[]).forEach(seq=>{ if (!Array.isArray(seq.sprites)) seq.sprites=[]; seq.sprites.push(null); });
+      (sim.sequences||[]).forEach(seq=>{
+        if (!Array.isArray(seq.sprites)) seq.sprites = [];
+        seq.sprites.push(null);
+        const presets = ensureArrowPresetsForSequence(seq);
+        presets.push({ vitesse: 900, phase: 0, delayMs: 0 });
+      });
       saveSimulations(); createPlayers(); drawPlayerConfigUI();
     };
 
@@ -2826,7 +3003,7 @@ box.appendChild(delBtn);
       clearPlayerEditorUI();
       simulations[name] = {
         initialPositions: [],
-        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [] }],
+        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [], arrowPresets: [] }],
         playerConfigs: [],
       };
       // réinitialiser explicitement les configurations pour éviter de reprendre celles de la simulation précédente
@@ -2841,7 +3018,7 @@ box.appendChild(delBtn);
     newSeqBtn.onclick = function () {
       const name = prompt("Nom de la séquence ?");
       if (!name) return;
-      simulations[currentSim].sequences.push({ name, arrows: [], comment: "", ballPosFinal:null, annotations: [], sprites: [] });
+      simulations[currentSim].sequences.push({ name, arrows: [], comment: "", ballPosFinal:null, annotations: [], sprites: [], arrowPresets: [] });
       currentSeq = simulations[currentSim].sequences.length - 1;
       saveSimulations(); updateSeqSelect(); drawField(); createPlayers(); drawPlayerConfigUI(); syncCommentBar(); drawAnnotations();
     };
