@@ -44,6 +44,56 @@
   margin-bottom: 5px;
 }
 
+.kas-move-column {
+  background: #fff;
+  border: 1px solid #e6e6f4;
+  border-radius: 8px;
+  padding: 6px 8px;
+  box-shadow: 0 1px 6px #0000000a;
+  flex: 1 1 260px;
+  min-width: 240px;
+}
+.kas-move-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.kas-move-summary {
+  font-size: 12px;
+  color: #1f2f3a;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+.kas-move-details {
+  margin-top: 8px;
+  border-top: 1px dashed #dcdcdc;
+  padding-top: 8px;
+}
+.kas-gear-btn {
+  border: 1px solid #d6d6e5;
+  background: #f7f7fb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.kas-gear-btn[data-open="1"] {
+  background: #ffe8a0;
+  border-color: #f1c453;
+}
+.kas-move-status {
+  font-size: 12px;
+  color: #2d7a46;
+  opacity: 0;
+  transition: opacity .2s;
+  margin-top: 4px;
+}
+.kas-move-status[data-active="1"] {
+  opacity: 1;
+}
+
 /* Inputs number pour les numéros et la vitesse */
 input[type="number"] {
   width: 66px !important;   /* Plus large pour vitesse (2000, etc.) */
@@ -332,104 +382,4 @@ button[data-active="1"] {
     background: #ffba3e;
     color: #212b44;
     font-weight: 700;
-}
-
-/* Liste joueurs compacte : 1 joueur = 1 ligne */
-.ks-player-grid {
-    display: grid;
-    grid-template-columns: 0.5fr 1.4fr 1.6fr 1.2fr 2.4fr 0.7fr;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    box-sizing: border-box;
-}
-.ks-player-header {
-    font-weight: 700;
-    font-size: 12px;
-    color: #1d1d1d;
-    padding: 4px 6px;
-    margin-bottom: 6px;
-}
-.ks-player-row {
-    background: #f8f8fa;
-    border-radius: 8px;
-    padding: 6px 8px;
-    font-size: 12px;
-    margin-bottom: 6px;
-}
-.ks-flex-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: nowrap;
-}
-.kas-mini-input {
-    width: 70px;
-    padding: 3px 6px;
-    font-size: 12px;
-    font-weight: 600;
-    text-align: center;
-}
-.kas-mini-input.kas-mini-name {
-    width: 120px;
-    text-align: left;
-}
-.kas-mini-select {
-    min-width: 120px;
-    max-width: 180px;
-    font-size: 12px;
-    padding: 4px 6px;
-}
-.kas-mini-color {
-    width: 42px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    background: transparent;
-}
-.kas-timing-line {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-    font-size: 12px;
-}
-.kas-timing-inner {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-    min-width: min(960px, 100%);
-}
-.kas-mini-select.kas-mini-type {
-    min-width: 140px;
-}
-.kas-timing-status {
-    font-size: 11px;
-    color: #555;
-    margin-left: 6px;
-}
-.kas-btn-ghost {
-    background: transparent;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 4px 8px;
-    cursor: pointer;
-    font-size: 12px;
-}
-.kas-btn-ghost:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-}
-.ks-muted-label {
-    font-size: 11px;
-    color: #666;
-}
-.ks-cell-index {
-    font-weight: 700;
-}
-.ks-actions-cell .kas-btn {
-    min-width: 36px;
 }
