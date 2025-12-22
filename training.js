@@ -8,11 +8,11 @@
     if (!trainingRoot || !trainingModeBtn || !svg) return;
 
     const pluginUrl = (window.kasendemiVars && window.kasendemiVars.pluginUrl) ? window.kasendemiVars.pluginUrl : "";
-    const assetBase = pluginUrl + "assets/";
-    const assetUrl = (file) => assetBase + encodeURI(file);
+    const TRAINING_ASSET_BASE = pluginUrl + "assets/entrainement/";
+    const assetUrl = (file) => TRAINING_ASSET_BASE + encodeURI(file);
     const STORAGE_KEY = "ks_training_simulations";
     const bgPath = assetUrl("terrain-entrainement.jpg");
-    const bgFallbackPath = pluginUrl + encodeURI("terrain entrainement.jpg");
+    const bgFallbackPath = TRAINING_ASSET_BASE + encodeURI("terrain entrainement.jpg");
     const terrainSize = { width: 900, height: 600 };
 
     const materials = [
@@ -134,6 +134,7 @@
     }
 
     function renderTerrain(){
+      console.debug("[training] terrain url", bgPath, "fallback", bgFallbackPath);
       svg.innerHTML = "";
       const bg = document.createElementNS(svg.namespaceURI, "image");
       bg.setAttribute("x", 0); bg.setAttribute("y", 0);
@@ -196,13 +197,15 @@
       const list = document.createElement("div");
       list.className = "training-material-list";
       materials.forEach(file => {
+        const url = assetUrl(file);
+        console.debug("[training] material url", url);
         const card = document.createElement("button");
         card.type = "button";
         card.className = "training-material";
         const img = document.createElement("img");
         img.loading = "lazy";
         img.alt = file;
-        img.src = assetUrl(file);
+        img.src = url;
         img.onerror = () => { img.remove(); card.classList.add("training-material-missing"); };
         const label = document.createElement("span");
         label.textContent = file.replace(/\.[^.]+$/, "");
