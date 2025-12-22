@@ -45,10 +45,17 @@ document.addEventListener("DOMContentLoaded", async function () {
               <div class="kas-row">
                 <label class="kas-inline" style="min-width:260px">
                   <span style="width:130px;display:inline-block">Taille (x)</span>
-                  <input id="ks-player-scale" type="range" min="0.5" max="1.4" step="0.05" value="0.8" style="flex:1">
+                  <input id="ks-player-scale" type="range" min="0.2" max="1.4" step="0.05" value="0.8" style="flex:1">
                   <span id="ks-player-scale-val" style="width:48px;text-align:right">0.80</span>
                 </label>
                 <button id="ks-player-scale-reset" class="kas-btn">Réinitialiser</button>
+              </div>
+              <div class="kas-row" style="margin-top:8px;">
+                <label class="kas-inline" style="min-width:260px">
+                  <span style="width:130px;display:inline-block">Taille ballon</span>
+                  <input id="ks-ball-scale" type="range" min="0.2" max="2.0" step="0.05" value="1" style="flex:1">
+                  <span id="ks-ball-scale-val" style="width:48px;text-align:right">1.00</span>
+                </label>
               </div>
             </div>
 
@@ -497,6 +504,8 @@ function moveControlsNearField(){
       const scaleInput = dock.querySelector("#ks-player-scale");
       const scaleVal   = dock.querySelector("#ks-player-scale-val");
       const scaleReset = dock.querySelector("#ks-player-scale-reset");
+      const ballScaleInput = dock.querySelector("#ks-ball-scale");
+      const ballScaleVal   = dock.querySelector("#ks-ball-scale-val");
       const labelMode  = dock.querySelector("#ks-label-mode");
       const labelShadow= dock.querySelector("#ks-label-shadow");
       const defStyle   = dock.querySelector("#ks-default-style");
@@ -506,19 +515,28 @@ function moveControlsNearField(){
         const d = getDisplay();
         scaleInput.value = String(d.playerScale || 0.8);
         scaleVal.textContent = (d.playerScale||0.8).toFixed(2);
+        ballScaleInput.value = String(d.ballScale || 1);
+        ballScaleVal.textContent = (d.ballScale||1).toFixed(2);
         labelMode.value = d.labelMode || "numero";
         labelShadow.checked = !!d.labelShadow;
         defStyle.value = d.defaultStyle || "silhouette";
         defCircle.value = d.defaultCircleColor || "#00bfff";
       }
       scaleInput.addEventListener("input", ()=>{
-        getDisplay().playerScale = parseFloat(scaleInput.value||"0.8");
+        getDisplay().playerScale = clampPlayerScale(parseFloat(scaleInput.value||"0.8"));
+        scaleInput.value = String(getDisplay().playerScale);
         scaleVal.textContent = getDisplay().playerScale.toFixed(2);
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
       });
       scaleReset.addEventListener("click", ()=>{
         getDisplay().playerScale = 0.8; scaleInput.value="0.8"; scaleVal.textContent="0.80";
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
+      });
+      ballScaleInput.addEventListener("input", ()=>{
+        getDisplay().ballScale = clampBallScale(parseFloat(ballScaleInput.value||"1"));
+        ballScaleInput.value = String(getDisplay().ballScale);
+        ballScaleVal.textContent = getDisplay().ballScale.toFixed(2);
+        saveSimulations(); if (mode==="tactic") { drawBall(); drawAnnotations(); }
       });
       labelMode.addEventListener("change", ()=>{
         getDisplay().labelMode = labelMode.value;
@@ -684,6 +702,17 @@ reorderDockPanels();           // impose l'ordre final des blocs
     drawAnnotations();
   }
 
+  function clampPlayerScale(val){
+    const v = parseFloat(val);
+    if (Number.isNaN(v)) return 0.8;
+    return Math.min(1.4, Math.max(0.2, v));
+  }
+  function clampBallScale(val){
+    const v = parseFloat(val);
+    if (Number.isNaN(v)) return 1;
+    return Math.min(2, Math.max(0.2, v));
+  }
+
   // Affichage global persisté dans simulations._display
   function getDisplay(){
     if (!simulations._display) simulations._display = {
@@ -692,7 +721,10 @@ reorderDockPanels();           // impose l'ordre final des blocs
       labelShadow: true,
       defaultStyle: "silhouette",
       defaultCircleColor: "#00bfff",
+      ballScale: 1,
     };
+    simulations._display.playerScale = clampPlayerScale(simulations._display.playerScale);
+    simulations._display.ballScale   = clampBallScale(simulations._display.ballScale);
     return simulations._display;
   }
 
@@ -1269,6 +1301,55 @@ function normalizeSequenceSpritesForCurrentSim(){
   sim.sequences.forEach((_, idx)=> ensureSeqSprites(idx));
 }
 /* === FIN INSERTION === */
+function removePlayerAtIndex(index){
+  const sim = simulations[currentSim];
+  if (!sim || !Array.isArray(sim.initialPositions)) return;
+  if (index < 0 || index >= sim.initialPositions.length) return;
+
+  sim.initialPositions.splice(index, 1);
+  if (Array.isArray(sim.playerConfigs)) sim.playerConfigs.splice(index, 1);
+  playerConfigs = sim.playerConfigs || [];
+
+  (sim.sequences || []).forEach(seq => {
+    if (Array.isArray(seq.sprites)) seq.sprites.splice(index, 1);
+    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(index, 1);
+
+    if (Array.isArray(seq.arrows)) {
+      seq.arrows = seq.arrows
+        .filter(a => a.playerIndex !== index)
+        .map(a => {
+          if (a.playerIndex != null && a.playerIndex > index) {
+            return { ...a, playerIndex: a.playerIndex - 1 };
+          }
+          return a;
+        });
+    }
+
+    if (Array.isArray(seq.annotations)) {
+      seq.annotations = seq.annotations
+        .map(ann => {
+          if (ann.kind === "highlight" && ann.playerIndex != null) {
+            if (ann.playerIndex === index) return null;
+            if (ann.playerIndex > index) return { ...ann, playerIndex: ann.playerIndex - 1 };
+          } else if (ann.kind === "connect" && Array.isArray(ann.pair)) {
+            if (ann.pair.includes(index)) return null;
+            const pair = ann.pair.map(p => (p > index ? p - 1 : p));
+            return { ...ann, pair };
+          }
+          return ann;
+        })
+        .filter(Boolean);
+    }
+  });
+
+  saveSimulations();
+  drawField();
+  createPlayers();
+  drawPlayerConfigUI();
+  drawAnnotations();
+  drawArrows();
+  drawBall();
+}
 
   function drawPlayerConfigUI() {
     if (!configContainer) return;
@@ -1460,13 +1541,7 @@ delBtn.innerHTML = `
   </svg>
 `;
 delBtn.onclick = () => {
-  simulations[currentSim].initialPositions.splice(i, 1);
-  simulations[currentSim].playerConfigs.splice(i, 1);
-  (simulations[currentSim].sequences||[]).forEach(seq=>{
-    if (Array.isArray(seq.sprites)) seq.sprites.splice(i,1);
-    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(i,1);
-  });
-  saveSimulations(); createPlayers(); drawPlayerConfigUI();
+  removePlayerAtIndex(i);
 };
 box.appendChild(delBtn);
 
@@ -2587,19 +2662,24 @@ box.appendChild(delBtn);
     else pos = getBallPositionForSequence(currentSeq);
     if (ballPos) pos = ballPos;
 
+    const ballScale = clampBallScale(getDisplay().ballScale || 1);
+    const baseBallSize = 28;
+    const ballSize = baseBallSize * ballScale;
+    const baseHit = Math.max(18, 22 * ballScale);
+
     const group = document.createElementNS(svg.namespaceURI, "g");
     group.classList.add("kas-ball-group");
 
     const hit = document.createElementNS(svg.namespaceURI, "circle");
-    hit.setAttribute("r", 22);
+    hit.setAttribute("r", baseHit);
     hit.setAttribute("fill", "transparent");
     hit.setAttribute("pointer-events", "fill");
     group.appendChild(hit);
 
     const img = document.createElementNS(svg.namespaceURI, "image");
     img.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/" + ballSprite);
-    img.setAttribute("width", 28);
-    img.setAttribute("height", 28);
+    img.setAttribute("width", ballSize);
+    img.setAttribute("height", ballSize);
     img.classList.add("ballon");
     img.style.cursor = "pointer";
     group.appendChild(img);
@@ -2609,15 +2689,15 @@ box.appendChild(delBtn);
       const off = visualOffset || {x:0, y:0};
       hit.setAttribute("cx", x);
       hit.setAttribute("cy", y);
-      img.setAttribute("x", x - 14 + off.x);
-      img.setAttribute("y", y - 14 + off.y);
+      img.setAttribute("x", x - (ballSize/2) + off.x);
+      img.setAttribute("y", y - (ballSize/2) + off.y);
     }
 
     applyBallRender(pos.x, pos.y);
 
     let draggingBall = false, moved = false, startX = 0, startY = 0, orig = { ...pos }, lastPos = { ...pos };
     const dragThreshold = 4;
-    const visualOffset = {x:0, y:-6};
+    const visualOffset = {x:0, y:-6 * ballScale};
 
     const endDrag = (ev) => {
       if (!draggingBall) return;
@@ -3428,10 +3508,12 @@ if (style==="rond"){
     }
 
     const bp = getBallPositionForSequence(seqIndex);
+    const ballScale = clampBallScale(getDisplay().ballScale||1);
+    const ballSize = 28 * ballScale;
     const ball = document.createElementNS(svgNS, "image");
     ball.setAttributeNS(xlink,"href", pluginUrl+"assets/"+ballSprite);
-    ball.setAttribute("x", bp.x-14); ball.setAttribute("y", bp.y-14);
-    ball.setAttribute("width", "28"); ball.setAttribute("height","28");
+    ball.setAttribute("x", bp.x - ballSize/2); ball.setAttribute("y", bp.y - ballSize/2);
+    ball.setAttribute("width", String(ballSize)); ball.setAttribute("height", String(ballSize));
     root.appendChild(ball);
     return root;
   }
@@ -3551,29 +3633,55 @@ if (style==="rond"){
   }
 
   /* ================= Vidéo Canvas (fluide) – phases + delays ================= */
-  async function loadImageAbs(url){ return await new Promise((ok,ko)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=ko; i.src=url; }); }
+  async function loadImageAbs(url){
+    return await new Promise((ok,ko)=>{
+      const i=new Image();
+      i.onload=()=>{
+        if (i.decode) {
+          i.decode().catch(()=>{}).finally(()=>ok(i));
+        } else {
+          ok(i);
+        }
+      };
+      i.onerror=()=>ko(new Error(`Echec chargement asset: ${url}`));
+      i.src=url;
+    });
+  }
+  async function loadImageWithFallback(url, fallbackUrl){
+    try {
+      return await loadImageAbs(url);
+    } catch(err){
+      console.warn(`[kas] Asset manquant, fallback sur face: ${url}`, err);
+      if (fallbackUrl && url !== fallbackUrl) {
+        try { return await loadImageAbs(fallbackUrl); }
+        catch(fbErr){ console.error("[kas] Fallback face indisponible", fbErr); throw fbErr; }
+      }
+      throw err;
+    }
+  }
   async function preloadCanvasAssetsForSeq(seqIndex){
     const terrainUrl = pluginUrl + "assets/terrain 1 avec foule.png";
     const ballUrl    = pluginUrl + "assets/" + ballSprite;
     const positions = getPositionsAtSequenceStart(seqIndex);
     ensurePlayerConfigs();
     const spriteUrls = new Set();
+    const fallbackUrl = pluginUrl + "assets/" + fallbackSprite;
+    spriteUrls.add(fallbackUrl); // toujours disponible pour fallback
     for (let i=0;i<positions.length;i++){
       const conf = playerConfigs[i]||{};
       if ((conf.style||getDisplay().defaultStyle||"silhouette")==="silhouette"){
-        const s = effSeqSprite(conf, seqIndex, i) || playerSprites[0].src;
+        const s = effSeqSprite(conf, seqIndex, i) || fallbackSprite;
         spriteUrls.add(pluginUrl + "assets/" + s);
       }
     }
-    const allUrls = [terrainUrl, ballUrl, ...spriteUrls];
-    const results = await Promise.all(allUrls.map(u=>loadImageAbs(u)));
-    const assets = { terrain: results[0], ball: results[1], sprites: {} };
-    let idx=2;
-    for (const su of spriteUrls) { assets.sprites[su] = results[idx++]; }
+    const assets = { terrain: null, ball: null, sprites: {} };
+    assets.terrain = await loadImageWithFallback(terrainUrl, terrainUrl);
+    assets.ball    = await loadImageWithFallback(ballUrl, ballUrl);
+    for (const su of spriteUrls) { assets.sprites[su] = await loadImageWithFallback(su, fallbackUrl); }
     return assets;
   }
 
-  function startCanvasRecorder(canvas, fps = 50){
+  function startCanvasRecorder(canvas, fps = 60){
     const stream = canvas.captureStream(fps);
     let mime = 'video/webm;codecs=vp9';
     if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
@@ -3594,7 +3702,7 @@ if (style==="rond"){
         rec.stop();
       });
     }
-    rec.start(100);
+    rec.start(Math.round(1000 / fps));
     return { rec, stopAndSave };
   }
 
@@ -3688,8 +3796,9 @@ for (let i=0;i<positions.length;i++){
     ctx.strokeStyle="#fff"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(positions[i].x, positions[i].y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   } else {
-    const su = pluginUrl + "assets/" + effSprite(conf);
-    const img = assets.sprites[su];
+    const spriteName = effSeqSprite(conf, seqIndex, i) || fallbackSprite;
+    const su = pluginUrl + "assets/" + spriteName;
+    const img = assets.sprites[su] || assets.sprites[pluginUrl + "assets/" + fallbackSprite];
     if (img){
       const w = Math.round(64*scale), h = Math.round(64*scale);
       ctx.drawImage(img, positions[i].x - w/2, positions[i].y - (h*0.72), w, h);
@@ -3708,7 +3817,9 @@ for (let i=0;i<positions.length;i++){
     }
 
     // Ballon
-    ctx.drawImage(assets.ball, ballPos.x - 14, ballPos.y - 14, 28, 28);
+    const ballScale = clampBallScale(getDisplay().ballScale||1);
+    const ballSize = 28 * ballScale;
+    ctx.drawImage(assets.ball, ballPos.x - ballSize/2, ballPos.y - ballSize/2, ballSize, ballSize);
   }
 
   async function animatePhaseCanvas(seqIndex, positionsIn, ctx, assets, fps, showArrows, phaseVal, initialBallPos){
@@ -3735,10 +3846,14 @@ for (let i=0;i<positions.length;i++){
 
     const frameMs = 1000 / fps;
     let elapsed = 0;
+    let lastTime = performance.now();
 
     return await new Promise(resolve=>{
       const tick = ()=>{
-        elapsed += frameMs;
+        const now = performance.now();
+        const delta = now - lastTime;
+        lastTime = now;
+        elapsed += Math.max(frameMs*0.5, Math.min(delta || frameMs, frameMs*1.5));
         let running = false;
 
         steps.forEach(s=>{
@@ -3772,7 +3887,7 @@ for (let i=0;i<positions.length;i++){
     });
   }
 
-  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 50, showArrows = true){
+  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 60, showArrows = true){
     let positions = JSON.parse(JSON.stringify(startPositions));
     const arrows = (simulations[currentSim]?.sequences?.[seqIndex]?.arrows || []).map(a=>({
       ...a, phase: (typeof a.phase==="number"?a.phase:0)
@@ -3795,13 +3910,13 @@ for (let i=0;i<positions.length;i++){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const { stopAndSave } = startCanvasRecorder(canvas, 50);
-
     const assets = await preloadCanvasAssetsForSeq(currentSeq);
     let positions = getPositionsAtSequenceStart(currentSeq);
-    // premier frame
-    drawFrameCanvas(ctx, assets, positions, (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1)), currentSeq, {showArrows});
-    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 50, showArrows);
+    const initialBall = (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1));
+    // premier frame (assets déjà prêts)
+    drawFrameCanvas(ctx, assets, positions, initialBall, currentSeq, {showArrows});
+    const { stopAndSave } = startCanvasRecorder(canvas, 60);
+    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 60, showArrows);
 
     const simName = currentSim || "Simulation";
     const seqName = (simulations[currentSim]?.sequences?.[currentSeq]?.name) || `Sequence-${currentSeq + 1}`;
@@ -3816,15 +3931,15 @@ for (let i=0;i<positions.length;i++){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const { stopAndSave } = startCanvasRecorder(canvas, 50);
-
     let positions = getPositionsAtSequenceStart(0);
+    const { stopAndSave } = startCanvasRecorder(canvas, 60);
 
     for (let i=0;i<seqs.length;i++){
       const assets = await preloadCanvasAssetsForSeq(i);
-      drawFrameCanvas(ctx, assets, positions, (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1)), i, {showArrows});
+      const initialBall = (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1));
+      drawFrameCanvas(ctx, assets, positions, initialBall, i, {showArrows});
       await new Promise(r=>setTimeout(r,120));
-      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 50, showArrows);
+      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 60, showArrows);
       await new Promise(r=>setTimeout(r,120));
     }
 
