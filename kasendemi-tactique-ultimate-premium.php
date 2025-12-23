@@ -168,6 +168,8 @@ function kasendemi_tactique_admin_page() { ?>
             <div id="training-panels" class="training-panels">
                 <div id="training-sequence-panel" class="training-panel"></div>
                 <div id="training-selection-panel" class="training-panel"></div>
+                <div id="training-players-panel" class="training-panel"></div>
+                <div id="training-arrows-panel" class="training-panel"></div>
             </div>
         </div>
     </div>

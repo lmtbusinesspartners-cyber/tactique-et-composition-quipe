@@ -250,6 +250,20 @@ svg#kasendemi-svg {
 .training-materials-top {
   margin-bottom: 12px;
 }
+.training-materials-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.training-materials-toggle button {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #dfe3eb;
+  background: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
 .training-toolbar {
   display: flex;
   flex-direction: column;
@@ -303,6 +317,9 @@ svg#kasendemi-svg {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;
+}
+.training-materials-collapsed .training-material-list {
+  display: none;
 }
 .training-materials-top .training-material-list {
   grid-auto-flow: column;

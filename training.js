@@ -9,8 +9,10 @@
 
     const pluginUrl = (window.kasendemiVars && window.kasendemiVars.pluginUrl) ? window.kasendemiVars.pluginUrl : "";
     const TRAINING_ASSET_BASE = pluginUrl + "assets/entrainement/";
+    const PLAYER_ASSET_BASE = pluginUrl;
     const assetUrl = (file) => TRAINING_ASSET_BASE + encodeURI(file);
     const STORAGE_KEY = "ks_training_simulations";
+    const MATERIALS_COLLAPSE_KEY = "ks_training_materials_collapsed";
     const bgPath = assetUrl("terrain-entrainement.jpg");
     const bgFallbackPath = TRAINING_ASSET_BASE + encodeURI("terrain entrainement.jpg");
     const terrainSize = { width: 900, height: 600 };
@@ -52,6 +54,8 @@
     let currentSeqIndex = state.simulations[currentSimKey].currentSeq || 0;
     let trainingArrowMode = false;
     let arrowStartId = null;
+    let currentArrowType = "move_player";
+    let materialsCollapsed = localStorage.getItem(MATERIALS_COLLAPSE_KEY) === "1";
 
     const els = {
       simSelect: document.getElementById("training-sim-select"),
@@ -79,7 +83,9 @@
       fieldScroll: document.getElementById("kas-field-scroll"),
       uiDock: document.getElementById("kas-ui-dock"),
       returnTop: document.getElementById("ks-return-top"),
-      classicRoot: document.querySelector(".kasendemi-tactique-frontend")
+      classicRoot: document.querySelector(".kasendemi-tactique-frontend"),
+      playersPanel: document.getElementById("training-players-panel"),
+      arrowsPanel: document.getElementById("training-arrows-panel")
     };
 
     const objectsLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -93,6 +99,8 @@
     renderMaterials();
     renderSequencePanel();
     renderSelectionPanel();
+    renderPlayersPanel();
+    renderArrowsPanel();
     drawObjects();
 
     attachUI();
@@ -122,8 +130,13 @@
 
     function normalizeSequence(seq){
       if (!Array.isArray(seq.objects)) seq.objects = [];
-      seq.objects.forEach(o => { if (!o.type) o.type = "material"; if (typeof o.scale === "undefined") o.scale = 1; });
+      seq.objects.forEach(o => {
+        if (!o.type) o.type = "material";
+        if (typeof o.scale === "undefined") o.scale = 1;
+        if (o.type === "player" && !o.sprite) o.sprite = "Joueur blanc A Face.png";
+      });
       if (!Array.isArray(seq.arrows)) seq.arrows = [];
+      seq.arrows.forEach(a => { if (!a.type) a.type = "move_player"; });
       if (!Array.isArray(seq.lastSnapshot)) seq.lastSnapshot = [];
     }
 
@@ -206,11 +219,24 @@
     function renderMaterials(){
       if (!els.materials) return;
       els.materials.innerHTML = "";
+      const header = document.createElement("div");
+      header.className = "training-materials-toggle";
       const title = document.createElement("h3");
       title.textContent = "Bibliothèque de matériels";
-      els.materials.appendChild(title);
+      title.style.margin = "0";
+      const toggle = document.createElement("button");
+      toggle.textContent = materialsCollapsed ? "Ouvrir" : "Réduire";
+      toggle.addEventListener("click", ()=>{
+        materialsCollapsed = !materialsCollapsed;
+        localStorage.setItem(MATERIALS_COLLAPSE_KEY, materialsCollapsed ? "1" : "0");
+        renderMaterials();
+      });
+      header.appendChild(title);
+      header.appendChild(toggle);
+      els.materials.appendChild(header);
       const list = document.createElement("div");
       list.className = "training-material-list";
+      if (materialsCollapsed) els.materials.classList.add("training-materials-collapsed"); else els.materials.classList.remove("training-materials-collapsed");
       materials.forEach(file => {
         const url = assetUrl(file);
         console.debug("[training] material url", url);
@@ -358,6 +384,128 @@
       els.selectionPanel.appendChild(sizeWrap);
     }
 
+    function renderPlayersPanel(){
+      if (!els.playersPanel) return;
+      els.playersPanel.innerHTML = "";
+      const title = document.createElement("h3");
+      title.textContent = "Joueurs";
+      els.playersPanel.appendChild(title);
+      const seq = getCurrentSeq();
+      const players = (seq.objects || []).filter(o => o.type === "player");
+      if (!players.length){
+        const p = document.createElement("p");
+        p.textContent = "Aucun joueur ajouté.";
+        els.playersPanel.appendChild(p);
+        return;
+      }
+      const list = document.createElement("div");
+      list.className = "training-seq-list";
+      players.forEach(ply => {
+        const row = document.createElement("div");
+        row.className = "training-seq-row";
+        row.dataset.active = ply.id === selectedId ? "1" : "0";
+        const name = document.createElement("div");
+        name.textContent = ply.label || ply.id;
+        const actions = document.createElement("div");
+        const selectBtn = document.createElement("button");
+        selectBtn.textContent = "Sélectionner";
+        selectBtn.addEventListener("click", ()=>{
+          selectedId = ply.id;
+          drawObjects();
+          renderSelectionPanel();
+          renderPlayersPanel();
+        });
+        actions.appendChild(selectBtn);
+        row.appendChild(name);
+        row.appendChild(actions);
+        list.appendChild(row);
+      });
+      els.playersPanel.appendChild(list);
+    }
+
+    function renderArrowsPanel(){
+      if (!els.arrowsPanel) return;
+      els.arrowsPanel.innerHTML = "";
+      const title = document.createElement("h3");
+      title.textContent = "Flèches / Mouvements";
+      els.arrowsPanel.appendChild(title);
+
+      const topRow = document.createElement("div");
+      topRow.style.display = "flex";
+      topRow.style.gap = "8px";
+      topRow.style.flexWrap = "wrap";
+      const select = document.createElement("select");
+      const arrowTypes = [
+        { value: "move_player", label: "Déplacement" },
+        { value: "dribble", label: "Conduite" },
+        { value: "pass_ground", label: "Passe au sol" },
+        { value: "pass_air", label: "Passe en l'air" },
+        { value: "shoot_ground", label: "Tir au sol" },
+        { value: "shoot_air", label: "Tir en l'air" },
+      ];
+      arrowTypes.forEach(t => {
+        const opt = document.createElement("option");
+        opt.value = t.value; opt.textContent = t.label;
+        select.appendChild(opt);
+      });
+      select.value = currentArrowType;
+      select.addEventListener("change", ()=> { currentArrowType = select.value; });
+      const clearBtn = document.createElement("button");
+      clearBtn.textContent = "Effacer les flèches";
+      clearBtn.addEventListener("click", ()=>{
+        const seq = getCurrentSeq();
+        seq.arrows = [];
+        drawObjects();
+        renderArrowsPanel();
+        saveState();
+      });
+      topRow.appendChild(select);
+      topRow.appendChild(clearBtn);
+      els.arrowsPanel.appendChild(topRow);
+
+      const seq = getCurrentSeq();
+      if (!seq.arrows || !seq.arrows.length){
+        const p = document.createElement("p");
+        p.textContent = "Aucune flèche. Activez le mode flèche puis cliquez sur deux objets.";
+        els.arrowsPanel.appendChild(p);
+        return;
+      }
+
+      const list = document.createElement("div");
+      list.className = "training-seq-list";
+      seq.arrows.forEach(arr => {
+        const row = document.createElement("div");
+        row.className = "training-seq-row";
+        const label = document.createElement("div");
+        label.textContent = `${arr.type || "déplacement"} : ${arr.from} ➜ ${arr.to}`;
+        const actions = document.createElement("div");
+        actions.style.display = "flex";
+        actions.style.gap = "6px";
+        const typeSel = document.createElement("select");
+        arrowTypes.forEach(t => {
+          const opt = document.createElement("option");
+          opt.value = t.value; opt.textContent = t.label;
+          typeSel.appendChild(opt);
+        });
+        typeSel.value = arr.type || "move_player";
+        typeSel.addEventListener("change", ()=>{ arr.type = typeSel.value; drawObjects(); saveState(); renderArrowsPanel(); });
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "🗑️";
+        delBtn.addEventListener("click", ()=>{
+          seq.arrows = seq.arrows.filter(a => a.id !== arr.id);
+          drawObjects();
+          renderArrowsPanel();
+          saveState();
+        });
+        actions.appendChild(typeSel);
+        actions.appendChild(delBtn);
+        row.appendChild(label);
+        row.appendChild(actions);
+        list.appendChild(row);
+      });
+      els.arrowsPanel.appendChild(list);
+    }
+
     function attachUI(){
       trainingModeBtn.addEventListener("click", ()=> setTrainingActive(true));
       document.addEventListener("kas-training-exit", ()=> setTrainingActive(false));
@@ -463,6 +611,8 @@
         selectedId = null;
         drawObjects();
         renderSelectionPanel();
+        renderPlayersPanel();
+        renderArrowsPanel();
       }
     }
 
@@ -511,13 +661,13 @@
         id,
         type: "player",
         label: `J${(seq.objects.filter(o=>o.type==="player").length||0)+1}`,
-        color: "#00bfff",
+        sprite: "Joueur blanc A Face.png",
         x: terrainSize.width / 2,
         y: terrainSize.height / 2,
         scale: 1,
         rotation: 0,
         w: 60,
-        h: 60
+        h: 90
       };
       seq.objects.push(obj);
       seq.lastSnapshot = seq.lastSnapshot || [];
@@ -525,6 +675,8 @@
       drawObjects();
       renderSequencePanel();
       renderSelectionPanel();
+      renderPlayersPanel();
+      renderArrowsPanel();
       saveState();
       toast.show("Joueur ajouté");
     }
@@ -541,21 +693,15 @@
         g.setAttribute("transform", `translate(${obj.x} ${obj.y}) rotate(${obj.rotation||0}) scale(${obj.scale||1})`);
 
         if (obj.type === "player"){
-          const radius = (obj.w||60)/2 * (obj.scale||1);
-          const circle = document.createElementNS(svg.namespaceURI, "circle");
-          circle.setAttribute("r", radius);
-          circle.setAttribute("fill", obj.color || "#00bfff");
-          circle.setAttribute("stroke", "#102030");
-          circle.setAttribute("stroke-width", 2);
-          g.appendChild(circle);
-
-          const label = document.createElementNS(svg.namespaceURI, "text");
-          label.textContent = obj.label || "";
-          label.setAttribute("fill", "#fff");
-          label.setAttribute("font-size", "14");
-          label.setAttribute("text-anchor", "middle");
-          label.setAttribute("dominant-baseline", "middle");
-          g.appendChild(label);
+          const img = document.createElementNS(svg.namespaceURI, "image");
+          img.setAttribute("href", PLAYER_ASSET_BASE + encodeURI(obj.sprite || "Joueur blanc A Face.png"));
+          img.setAttribute("x", -(obj.w||60)/2);
+          img.setAttribute("y", -(obj.h||90)/2);
+          img.setAttribute("width", (obj.w||60));
+          img.setAttribute("height", (obj.h||90));
+          img.setAttribute("preserveAspectRatio", "xMidYMid meet");
+          img.addEventListener("error", ()=> console.warn("Sprite joueur manquant:", obj.sprite));
+          g.appendChild(img);
         } else {
           const img = document.createElementNS(svg.namespaceURI, "image");
           img.setAttribute("href", assetUrl(obj.asset));
@@ -633,19 +779,22 @@
           arrowStartId = id;
           toast.show("Définir la cible de la flèche");
         } else if (arrowStartId !== id){
-          seq.arrows.push({ id: `arr_${Date.now()}`, from: arrowStartId, to: id, type: "move_player" });
+          seq.arrows.push({ id: `arr_${Date.now()}`, from: arrowStartId, to: id, type: currentArrowType });
           arrowStartId = null;
           drawObjects();
+          renderArrowsPanel();
           saveState();
           toast.show("Flèche ajoutée");
         }
         selectedId = id;
         renderSelectionPanel();
+        renderPlayersPanel();
         return;
       }
       preChangeSnapshot = cloneObjects(seq.objects);
       selectedId = id;
       renderSelectionPanel();
+      renderPlayersPanel();
       const start = getSvgPoint(evt);
       dragContext = { id, start, origin: { x: obj.x, y: obj.y } };
       svg.setPointerCapture(evt.pointerId);
@@ -755,6 +904,8 @@
       selectedId = copy.id;
       drawObjects();
       renderSequencePanel();
+      renderPlayersPanel();
+      renderArrowsPanel();
       saveState();
     }
 
@@ -768,6 +919,8 @@
       selectedId = null;
       drawObjects();
       renderSequencePanel();
+      renderPlayersPanel();
+      renderArrowsPanel();
       saveState();
     }
 
@@ -789,9 +942,11 @@
           seq.objects = endState;
           seq.lastSnapshot = startState;
           isPlaying = false;
-          drawObjects();
-          saveState();
-        }
+      drawObjects();
+      renderPlayersPanel();
+      renderArrowsPanel();
+      saveState();
+    }
       }
       requestAnimationFrame(step);
     }
@@ -882,25 +1037,16 @@
         ctx.fillStyle = "#0f2c19"; ctx.fillRect(0,0,canvas.width, canvas.height);
       }
       for (const obj of objects){
-        const img = await getImage(assetUrl(obj.asset), pluginUrl + encodeURI(obj.asset));
         ctx.save();
         ctx.translate(obj.x, obj.y);
         ctx.rotate(((obj.rotation||0) * Math.PI)/180);
         if (obj.type === "player"){
-          const radius = (obj.w||60)/2 * (obj.scale||1);
-          ctx.fillStyle = obj.color || "#00bfff";
-          ctx.strokeStyle = "#102030";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(0, 0, radius, 0, Math.PI*2);
-          ctx.fill();
-          ctx.stroke();
-          ctx.fillStyle = "#fff";
-          ctx.font = "14px sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(obj.label || "", 0, 0);
+          const sprite = await getImage(PLAYER_ASSET_BASE + encodeURI(obj.sprite || "Joueur blanc A Face.png"), PLAYER_ASSET_BASE + encodeURI("Joueur blanc A Face.png"));
+          const sizeW = (obj.w||60) * (obj.scale||1);
+          const sizeH = (obj.h||90) * (obj.scale||1);
+          if (sprite) ctx.drawImage(sprite, -sizeW/2, -sizeH/2, sizeW, sizeH);
         } else {
+          const img = await getImage(assetUrl(obj.asset), pluginUrl + encodeURI(obj.asset));
           const sizeW = (obj.w||80) * (obj.scale||1);
           const sizeH = (obj.h||80) * (obj.scale||1);
           if (img) {
