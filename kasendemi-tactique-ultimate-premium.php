@@ -41,6 +41,7 @@ function kasendemi_tactique_enqueue_assets(){
     $plugin_url = plugin_dir_url(__FILE__);
     wp_enqueue_style('kasendemi-tactique-style', $plugin_url . 'kasendemi-tactique-premium.css', [], '1.5');
     wp_enqueue_script('kasendemi-tactique-script', $plugin_url . 'script.js', [], '1.5', true);
+    wp_enqueue_script('kasendemi-training-script', $plugin_url . 'training.js', ['kasendemi-tactique-script'], '1.0', true);
     wp_localize_script('kasendemi-tactique-script', 'kasendemiVars', [
         'pluginUrl'   => $plugin_url,
         'ajaxUrl'     => admin_url('admin-ajax.php'),
@@ -73,6 +74,7 @@ function kasendemi_tactique_admin_page() { ?>
         <div style="margin-bottom:18px; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; text-align:center;">
             <button id="tacticModeBtn">Schéma tactique</button>
             <button id="compoModeBtn">Composition d'équipe</button>
+            <button id="trainingModeBtn">Entraînement</button>
         </div>
 
         <!-- 2. BARRE AVANCÉE -->
@@ -128,6 +130,47 @@ function kasendemi_tactique_admin_page() { ?>
             </div>
             <!-- CONFIG CONTAINER (dans le même scroll que le terrain) -->
             <div id="config-container" style="margin-top:20px;width:900px;min-width:900px;"></div>
+        </div>
+
+        <!-- 5. MODULE ENTRAÎNEMENT -->
+        <div id="training-root" style="display:none; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; margin-top:12px;">
+            <div id="training-toolbar" class="training-toolbar">
+                <div class="training-toolbar-row">
+                    <button id="training-new-sim">Nouvelle séance</button>
+                    <button id="training-rename-sim" title="Renommer la séance">✏️</button>
+                    <button id="training-delete-sim" title="Supprimer la séance">🗑️</button>
+                    <select id="training-sim-select"></select>
+                </div>
+                <div class="training-toolbar-row">
+                    <button id="training-new-seq">Nouvelle séquence</button>
+                    <button id="training-rename-seq" title="Renommer la séquence">✏️</button>
+                    <button id="training-delete-seq" title="Supprimer la séquence">🗑️</button>
+                    <button id="training-prev-seq" title="Séquence précédente">&lt;</button>
+                    <select id="training-seq-select"></select>
+                    <button id="training-next-seq" title="Séquence suivante">&gt;</button>
+                    <button id="training-play-seq">▶ Lecture</button>
+                </div>
+                <div class="training-toolbar-row">
+                    <button id="training-add-player">Ajouter un joueur</button>
+                    <button id="training-arrow-mode">Mode flèches</button>
+                    <button id="training-duplicate">Dupliquer</button>
+                    <button id="training-delete">Supprimer</button>
+                    <button id="training-export-png">Export PNG</button>
+                    <button id="training-export-video">Export Vidéo</button>
+                </div>
+            </div>
+            <div id="training-materials" class="training-panel training-materials-top"></div>
+            <div id="training-scroll" style="width:100%; overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch;">
+                <div id="training-terrain-wrapper" style="position:relative; display:inline-block;">
+                    <svg id="training-svg" width="900" height="600" style="border:1px solid #ddd; background:#0f2c19; display:block;"></svg>
+                </div>
+            </div>
+            <div id="training-panels" class="training-panels">
+                <div id="training-sequence-panel" class="training-panel"></div>
+                <div id="training-selection-panel" class="training-panel"></div>
+                <div id="training-players-panel" class="training-panel"></div>
+                <div id="training-arrows-panel" class="training-panel"></div>
+            </div>
         </div>
     </div>
 <?php }

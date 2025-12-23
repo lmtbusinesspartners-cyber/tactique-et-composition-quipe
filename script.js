@@ -599,6 +599,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
     }
 
     function onKey(e) {
+      if (isTrainingActive()) return;
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -712,6 +713,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   const configContainer = document.getElementById("config-container");
   const tacticModeBtn = document.getElementById("tacticModeBtn");
   const compoModeBtn  = document.getElementById("compoModeBtn");
+  const trainingModeBtn = document.getElementById("trainingModeBtn");
   const toolMoveBtn   = document.getElementById("tool-move-players");
   const toolArrowBtn  = document.getElementById("tool-draw-arrows");
   const fieldScroll   = document.getElementById("kas-field-scroll");
@@ -724,6 +726,10 @@ reorderDockPanels();           // impose l'ordre final des blocs
   const editionOnlyEls = document.querySelectorAll(".ks-edition-only");
   const commandsAnchor = document.getElementById("ks-commands-anchor");
   const movementUIRefs = new Map();
+  const isTrainingActive = () => (document.body && document.body.dataset.ksTraining === "1");
+  function requestTrainingDeactivate() {
+    document.dispatchEvent(new CustomEvent("kas-training-exit", { bubbles: true }));
+  }
 
   function lockFieldScroll(){
     if (fieldScroll) fieldScroll.classList.add("ks-scroll-lock");
@@ -738,6 +744,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   }
 
   function setInteractionTool(tool){
+    if (isTrainingActive()) return;
     interactionTool = tool;
     if (toolMoveBtn) toolMoveBtn.dataset.active = tool === TOOL_MOVE ? "1" : "0";
     if (toolArrowBtn) toolArrowBtn.dataset.active = tool === TOOL_ARROW ? "1" : "0";
@@ -749,6 +756,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   }
 
   function setInteractionMode(modeName){
+    if (isTrainingActive()) return;
     interactionMode = modeName;
     const isEdition = interactionMode === MODE_EDITION;
     if (navModeBtn) navModeBtn.dataset.active = isEdition ? "0" : "1";
@@ -1006,6 +1014,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
 
   /* ================= Modes ================= */
   function switchMode(newMode) {
+    if (isTrainingActive()) return;
     mode = newMode;
     setInteractionMode(MODE_NAVIGATION);
     // Exclure les éléments .ks-edition-only pour qu'ils restent masqués en mode navigation
@@ -1025,8 +1034,22 @@ reorderDockPanels();           // impose l'ordre final des blocs
       updateCompoSelect(); drawCompoConfigUI(); drawCompoPlayers(); syncCommentBar();
     }
   }
-  if (tacticModeBtn) tacticModeBtn.onclick = () => switchMode("tactic");
-  if (compoModeBtn)  compoModeBtn.onclick  = () => switchMode("compo");
+  if (tacticModeBtn) tacticModeBtn.onclick = () => {
+    if (isTrainingActive()) {
+      requestTrainingDeactivate();
+      setTimeout(()=>{ if (!isTrainingActive()) switchMode("tactic"); }, 20);
+      return;
+    }
+    switchMode("tactic");
+  };
+  if (compoModeBtn)  compoModeBtn.onclick  = () => {
+    if (isTrainingActive()) {
+      requestTrainingDeactivate();
+      setTimeout(()=>{ if (!isTrainingActive()) switchMode("compo"); }, 20);
+      return;
+    }
+    switchMode("compo");
+  };
   if (toolMoveBtn) toolMoveBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MOVE));
   if (toolArrowBtn) toolArrowBtn.addEventListener("click", ()=> setInteractionTool(TOOL_ARROW));
   if (navModeBtn) navModeBtn.addEventListener("click", ()=> setInteractionMode(MODE_NAVIGATION));
