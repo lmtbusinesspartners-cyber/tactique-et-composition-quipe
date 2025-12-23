@@ -247,6 +247,9 @@ svg#kasendemi-svg {
   box-shadow: 0 2px 16px #0000000c;
   padding: 10px;
 }
+.training-materials-top {
+  margin-bottom: 12px;
+}
 .training-toolbar {
   display: flex;
   flex-direction: column;
@@ -300,6 +303,15 @@ svg#kasendemi-svg {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 8px;
+}
+.training-materials-top .training-material-list {
+  grid-auto-flow: column;
+  grid-auto-columns: 150px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.training-materials-top .training-material {
+  min-width: 140px;
 }
 .training-material {
   display: flex;

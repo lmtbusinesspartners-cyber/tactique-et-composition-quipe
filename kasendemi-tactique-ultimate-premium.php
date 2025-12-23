@@ -151,20 +151,23 @@ function kasendemi_tactique_admin_page() { ?>
                     <button id="training-play-seq">▶ Lecture</button>
                 </div>
                 <div class="training-toolbar-row">
+                    <button id="training-add-player">Ajouter un joueur</button>
+                    <button id="training-arrow-mode">Mode flèches</button>
                     <button id="training-duplicate">Dupliquer</button>
                     <button id="training-delete">Supprimer</button>
                     <button id="training-export-png">Export PNG</button>
                     <button id="training-export-video">Export Vidéo</button>
                 </div>
             </div>
+            <div id="training-materials" class="training-panel training-materials-top"></div>
             <div id="training-scroll" style="width:100%; overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch;">
                 <div id="training-terrain-wrapper" style="position:relative; display:inline-block;">
                     <svg id="training-svg" width="900" height="600" style="border:1px solid #ddd; background:#0f2c19; display:block;"></svg>
                 </div>
             </div>
             <div id="training-panels" class="training-panels">
-                <div id="training-materials" class="training-panel"></div>
                 <div id="training-sequence-panel" class="training-panel"></div>
+                <div id="training-selection-panel" class="training-panel"></div>
             </div>
         </div>
     </div>
