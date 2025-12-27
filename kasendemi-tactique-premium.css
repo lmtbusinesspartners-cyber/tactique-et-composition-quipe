@@ -104,8 +104,8 @@ input[type="number"] {
   color: #eaa000;
 }
 
-/* Mode bouton de switch (compo/tactique) plus visible */
-#tacticModeBtn, #compoModeBtn {
+/* Mode bouton de switch (compo/tactique/entrainement) plus visible */
+#tacticModeBtn, #compoModeBtn, #entrainementModeBtn {
   padding: 10px 22px;
   border-radius: 7px;
   border: none;
@@ -118,12 +118,12 @@ input[type="number"] {
   letter-spacing: 0.5px;
   transition: background 0.22s, color 0.22s;
 }
-#tacticModeBtn:hover, #compoModeBtn:hover {
+#tacticModeBtn:hover, #compoModeBtn:hover, #entrainementModeBtn:hover {
   background: #ffba3e;
   color: #212b44;
 }
 
-.compo-only, .tactic-only {
+.compo-only, .tactic-only, .entrainement-only {
   /* Sera géré en JS, mais au cas où : */
   display: none;
 }

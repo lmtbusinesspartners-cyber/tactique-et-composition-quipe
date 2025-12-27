@@ -72,11 +72,13 @@ function kasendemi_tactique_admin_page() { ?>
         <!-- 1. BOUTONS DE MODE -->
         <div style="margin-bottom:18px; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; text-align:center;">
             <button id="tacticModeBtn">Schéma tactique</button>
+            <button id="entrainementModeBtn">Entraînement</button>
             <button id="compoModeBtn">Composition d'équipe</button>
         </div>
 
         <!-- 2. BARRE AVANCÉE -->
         <div id="toolbar-advanced" style="margin-bottom:8px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box;">
+            <!-- TACTIC ONLY -->
             <button id="addPlayerBtn" class="tactic-only">Ajouter un joueur</button>
             <button id="newSimBtn" class="tactic-only">Nouvelle simulation</button>
             <button id="renameSimBtn" class="tactic-only" title="Renommer simulation">✏️</button>
@@ -90,7 +92,6 @@ function kasendemi_tactique_admin_page() { ?>
             <button id="mode-edition" class="tactic-only">Mode Édition</button>
             <button id="tool-move-players" class="tactic-only">Déplacer joueurs</button>
             <button id="tool-draw-arrows" class="tactic-only">Flèches / Mouvements</button>
-            <!-- ICI : type de flèche dans la barre avancée -->
             <select id="arrow-type-select" class="tactic-only" style="min-width:110px;">
                 <option value="move_player">Déplacement</option>
                 <option value="dribble">Conduite</option>
@@ -101,6 +102,33 @@ function kasendemi_tactique_admin_page() { ?>
             </select>
             <select id="simSelect" class="tactic-only" style="min-width:80px;max-width:120px;"></select>
             <select id="seqSelect" class="tactic-only" style="min-width:70px;max-width:100px;"></select>
+
+            <!-- ENTRAINEMENT ONLY (identique à tactic-only mais avec "Séance" au lieu de "Simulation") -->
+            <button id="addPlayerBtnEntr" class="entrainement-only">Ajouter un joueur</button>
+            <button id="newSeanceBtn" class="entrainement-only">Nouvelle séance</button>
+            <button id="renameSeanceBtn" class="entrainement-only" title="Renommer séance">✏️</button>
+            <button id="deleteSeanceBtn" class="entrainement-only" title="Supprimer séance">🗑️</button>
+            <button id="newSeqBtnEntr" class="entrainement-only">Nouvelle séquence</button>
+            <button id="renameSeqBtnEntr" class="entrainement-only" title="Renommer séquence">✏️</button>
+            <button id="deleteSeqBtnEntr" class="entrainement-only" title="Supprimer séquence">🗑️</button>
+            <button id="clearArrowsBtnEntr" class="entrainement-only" title="Supprimer toutes les flèches de la séquence">🧹 Flèches</button>
+            <button id="toggleArrowsBtnEntr" class="entrainement-only">Afficher/Masquer flèches</button>
+            <button id="mode-navigation-entr" class="entrainement-only">Mode Navigation</button>
+            <button id="mode-edition-entr" class="entrainement-only">Mode Édition</button>
+            <button id="tool-move-players-entr" class="entrainement-only">Déplacer joueurs</button>
+            <button id="tool-draw-arrows-entr" class="entrainement-only">Flèches / Mouvements</button>
+            <select id="arrow-type-select-entr" class="entrainement-only" style="min-width:110px;">
+                <option value="move_player">Déplacement</option>
+                <option value="dribble">Conduite</option>
+                <option value="pass_ground">Passe au sol</option>
+                <option value="pass_air">Passe en l'air</option>
+                <option value="shoot_ground">Tir au sol</option>
+                <option value="shoot_air">Tir en l'air</option>
+            </select>
+            <select id="seanceSelect" class="entrainement-only" style="min-width:80px;max-width:120px;"></select>
+            <select id="seqSelectEntr" class="entrainement-only" style="min-width:70px;max-width:100px;"></select>
+
+            <!-- COMPO ONLY -->
             <button id="addCompoPlayerBtn" class="compo-only">Ajouter un joueur</button>
             <select id="compoSelect" class="compo-only" style="min-width:90px;max-width:140px;margin-left:6px;"></select>
             <button id="resetCompoBtn" class="compo-only">Nouvelle compo</button>
@@ -108,15 +136,25 @@ function kasendemi_tactique_admin_page() { ?>
 
         <!-- Bouton retour commandes en mode édition -->
         <button id="ks-return-top" class="tactic-only ks-edition-only ks-floating-return" style="display:none;">⬆ Retour commandes</button>
+        <button id="ks-return-top-entr" class="entrainement-only ks-edition-only ks-floating-return" style="display:none;">⬆ Retour commandes</button>
 
         <!-- 3. BARRE PRINCIPALE (lecture) -->
         <div id="toolbar-main" style="margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; background:#f8f8fa; border-radius:10px; box-shadow:0 1px 7px #0001; padding:6px; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; overflow-x:hidden;">
+            <!-- TACTIC ONLY -->
             <button id="playSeqBtn" class="tactic-only">▶ Séquence</button>
             <button id="playAllBtn" class="tactic-only">▶ Tout</button>
             <button id="showSeqStartBtn" class="tactic-only" title="Début de séquence">Début</button>
             <button id="showSeqEndBtn" class="tactic-only" title="Fin de séquence">Fin</button>
             <button id="prevSeqBtn" class="tactic-only" title="Séquence précédente">&lt;</button>
             <button id="nextSeqBtn" class="tactic-only" title="Séquence suivante">&gt;</button>
+
+            <!-- ENTRAINEMENT ONLY -->
+            <button id="playSeqBtnEntr" class="entrainement-only">▶ Séquence</button>
+            <button id="playAllBtnEntr" class="entrainement-only">▶ Tout</button>
+            <button id="showSeqStartBtnEntr" class="entrainement-only" title="Début de séquence">Début</button>
+            <button id="showSeqEndBtnEntr" class="entrainement-only" title="Fin de séquence">Fin</button>
+            <button id="prevSeqBtnEntr" class="entrainement-only" title="Séquence précédente">&lt;</button>
+            <button id="nextSeqBtnEntr" class="entrainement-only" title="Séquence suivante">&gt;</button>
         </div>
 
         <!-- 4. WRAPPER SCROLL : terrain + config (scroll horizontal synchronisé) -->
@@ -199,10 +237,44 @@ add_action('wp_ajax_ksim_save_compos', function() {
     update_user_meta($user_id, 'ksim_compos', $body['compos']);
     wp_send_json_success(['message' => 'Sauvegardé']);
 });
+// Récupérer séances d'entraînement de l'utilisateur connecté
+add_action('wp_ajax_ksim_get_seances', function() {
+    check_ajax_referer('ksim_nonce','nonce');
+    if (!is_user_logged_in()) {
+        wp_send_json_error(['message' => 'Non connecté']);
+    }
+    $user_id = get_current_user_id();
+    $seances = get_user_meta($user_id, 'ksim_seances', true);
+    if (!$seances) $seances = [];
+    wp_send_json_success(['seances' => $seances]);
+});
+
+// Sauvegarder séances d'entraînement de l'utilisateur connecté
+add_action('wp_ajax_ksim_save_seances', function() {
+    check_ajax_referer('ksim_nonce','nonce');
+    if (!is_user_logged_in()) {
+        wp_send_json_error(['message' => 'Non connecté']);
+    }
+    $json = file_get_contents('php://input');
+    $body = json_decode($json, true);
+    if (!isset($body['seances']) || !is_array($body['seances'])) {
+        wp_send_json_error(['message' => 'Données invalides']);
+    }
+    // Limite taille raisonnable (~500KB)
+    if (strlen(json_encode($body['seances'])) > 500 * 1024) {
+        wp_send_json_error(['message' => 'Données trop volumineuses']);
+    }
+    $user_id = get_current_user_id();
+    update_user_meta($user_id, 'ksim_seances', $body['seances']);
+    wp_send_json_success(['message' => 'Sauvegardé']);
+});
+
 add_action('wp_ajax_nopriv_ksim_get_simulations', 'ksim_nopriv');
 add_action('wp_ajax_nopriv_ksim_save_simulations', 'ksim_nopriv');
 add_action('wp_ajax_nopriv_ksim_get_compos', 'ksim_nopriv');
 add_action('wp_ajax_nopriv_ksim_save_compos', 'ksim_nopriv');
+add_action('wp_ajax_nopriv_ksim_get_seances', 'ksim_nopriv');
+add_action('wp_ajax_nopriv_ksim_save_seances', 'ksim_nopriv');
 
 function ksim_nopriv(){
     wp_send_json_error(['message' => 'Non connecté'], 401);

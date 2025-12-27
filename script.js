@@ -117,10 +117,19 @@ document.addEventListener("DOMContentLoaded", async function () {
 
             <!-- COMPOSITION -->
             <div class="kas-section sec-compo">
-              <div class="kas-section-title">Composition d’équipe</div>
+              <div class="kas-section-title">Composition d'équipe</div>
               <div class="kas-row">
                 <button id="ksexp-compo-png"  class="kas-btn">PNG (composition)</button>
                 <button id="ksexp-compo-sb"   class="kas-btn">Storyboard (composition)</button>
+              </div>
+            </div>
+
+            <!-- ENTRAINEMENT -->
+            <div class="kas-section sec-entrainement">
+              <div class="kas-section-title">Entraînement</div>
+              <div class="kas-row">
+                <button id="ksexp-entr-png-on"  class="kas-btn">PNG (flèches)</button>
+                <button id="ksexp-entr-png-off" class="kas-btn">PNG (sans)</button>
               </div>
             </div>
           </div>
@@ -166,6 +175,32 @@ document.addEventListener("DOMContentLoaded", async function () {
                 <button id="ks-annot-clear"   class="kas-btn">Effacer tout</button>
               </div>
               <div class="kas-help">Surbrillance/Connexion : cliquez les joueurs · Sélection : cliquez un objet, déplacez-le (glisser), double-cliquez un texte pour éditer.</div>
+            </div>
+          </div>
+        </details>
+
+        <!-- Matériel d'entraînement (uniquement visible en mode entrainement) -->
+        <details id="ks-materiel-panel" class="kas-card sec-entrainement" ${ (localStorage.getItem('ks_materiel_open')==='1') ? 'open' : '' }>
+          <summary id="ks-materiel-summary">
+            <span class="title">⚽ Matériel d'entraînement</span>
+            <span class="hint">Ajouter du matériel sur le terrain</span>
+          </summary>
+          <div class="kas-grid">
+            <div class="kas-section">
+              <div class="kas-section-title">Cliquez pour ajouter au terrain</div>
+              <div class="kas-row" id="ks-materiel-library" style="flex-wrap:wrap;gap:8px;">
+                <button class="kas-btn ks-materiel-add" data-mat="piquet">🔶 Piquet</button>
+                <button class="kas-btn ks-materiel-add" data-mat="plot_orange">🔸 Plot</button>
+                <button class="kas-btn ks-materiel-add" data-mat="coupelle_rouge">🔴 Coupelle R</button>
+                <button class="kas-btn ks-materiel-add" data-mat="coupelle_bleu">🔵 Coupelle B</button>
+                <button class="kas-btn ks-materiel-add" data-mat="haie">🚧 Haie</button>
+                <button class="kas-btn ks-materiel-add" data-mat="cerceau_rouge">⭕ Cerceau R</button>
+                <button class="kas-btn ks-materiel-add" data-mat="cerceau_jaune">🟡 Cerceau J</button>
+                <button class="kas-btn ks-materiel-add" data-mat="echelle">🪜 Échelle</button>
+                <button class="kas-btn ks-materiel-add" data-mat="mannequin">🧍 Mannequin</button>
+                <button class="kas-btn ks-materiel-add" data-mat="mini_but">🥅 Mini but</button>
+              </div>
+              <div class="kas-help">Glissez les éléments sur le terrain. Double-cliquez pour supprimer.</div>
             </div>
           </div>
         </details>
@@ -390,6 +425,7 @@ function moveControlsNearField(){
         /* Par défaut caché, on force en JS via style.display="block" */
         .sec-tactic{display:none}
         .sec-compo{display:none}
+        .sec-entrainement{display:none}
 
         /* Popup flèche */
         .kas-popup-arrow{
@@ -620,6 +656,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   // sections export spécifiques
   document.querySelectorAll(".sec-tactic").forEach(el => el.style.display = (currentMode === "tactic" ? "block" : "none"));
   document.querySelectorAll(".sec-compo") .forEach(el => el.style.display = (currentMode === "compo"  ? "block" : "none"));
+  document.querySelectorAll(".sec-entrainement").forEach(el => el.style.display = (currentMode === "entrainement" ? "block" : "none"));
 
   // panneaux à cacher en mode compo
   const disp = document.getElementById("ks-display-panel");   // 🎛️ Affichage & joueurs
@@ -663,6 +700,18 @@ reorderDockPanels();           // impose l'ordre final des blocs
   let compos = {};
   let currentCompo = "";
   let mode = "tactic";
+
+  // Variables pour le mode entraînement (séances)
+  let seances = {};
+  let currentSeance = "";
+  let currentSeqEntr = 0;
+  let playersEntr = [];
+  let playerConfigsEntr = [];
+  let arrowsVisibleEntr = true;
+  let customBallPosEntr = null;
+  // Matériel d'entraînement placé sur le terrain
+  let materielPlacements = [];
+
   const TOOL_MOVE = "move_players";
   const TOOL_ARROW = "draw_arrows";
   const MODE_NAVIGATION = "navigation";
@@ -959,6 +1008,43 @@ reorderDockPanels();           // impose l'ordre final des blocs
     } catch (e){ console.warn("Sauvegarde compos locale impossible", e); }
   }
 
+  // ================= AJAX SÉANCES (Entraînement) =================
+  async function fetchSeancesFromServer() {
+    if (!canSync) return {};
+    try {
+      const url = `${kasendemiVars.ajaxUrl}?action=ksim_get_seances&nonce=${encodeURIComponent(kasendemiVars.nonce)}`;
+      const response = await fetch(url, { credentials: "same-origin" });
+      const res = await response.json();
+      if (res.success && res.data && res.data.seances) return res.data.seances;
+      return {};
+    } catch (e) { console.warn("Erreur de chargement des séances", e); return {}; }
+  }
+  async function saveSeancesToServer(seancesObj) {
+    if (!canSync) return true;
+    try {
+      const url = `${kasendemiVars.ajaxUrl}?action=ksim_save_seances&nonce=${encodeURIComponent(kasendemiVars.nonce)}`;
+      const response = await fetch(url, {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seances: seancesObj }),
+      });
+      const res = await response.json();
+      if (!res.success) { console.warn("Sauvegarde séances KO :", res.data); return false; }
+      return true;
+    } catch (e) { console.warn("Erreur réseau lors de la sauvegarde séances", e); return false; }
+  }
+  function loadSeancesFromLocal(){
+    try {
+      const raw = localStorage.getItem("seances");
+      return raw ? JSON.parse(raw) : null;
+    } catch (e){ console.warn("Lecture séances locale impossible", e); return null; }
+  }
+  function saveSeancesToLocal(seancesObj){
+    try {
+      localStorage.setItem("seances", JSON.stringify(seancesObj||{}));
+    } catch (e){ console.warn("Sauvegarde séances locale impossible", e); }
+  }
+
   function mergeSimSources(serverObj, localObj){
     const merged = {};
     if (localObj && typeof localObj === "object"){ Object.assign(merged, localObj); }
@@ -1013,6 +1099,38 @@ reorderDockPanels();           // impose l'ordre final des blocs
   Object.values(compos).forEach(c=>{ if (typeof c.comment !== "string") c.comment = ""; });
   saveComposToLocal(compos);
 
+  // ================= Chargement des séances (Entraînement) =================
+  const srvSeances = await fetchSeancesFromServer();
+  const localSeances = loadSeancesFromLocal();
+  seances = mergeSimSources(srvSeances, localSeances);
+  if (!seances || typeof seances !== "object" || Object.keys(seances).length === 0) {
+    seances = {
+      "Séance 1": {
+        initialPositions: [],
+        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [], materiel: [] }],
+        playerConfigs: [],
+      },
+      _display: { playerScale:0.8, labelMode:"numero", labelShadow:true, defaultStyle:"silhouette", defaultCircleColor:"#00bfff" }
+    };
+    currentSeance = "Séance 1";
+    await saveSeancesToServer(seances);
+  }
+  if (!seances._display) seances._display = { playerScale:0.8, labelMode:"numero", labelShadow:true, defaultStyle:"silhouette", defaultCircleColor:"#00bfff" };
+  currentSeance = Object.keys(seances).find(k=>k!=="_display") || Object.keys(seances)[0];
+  Object.values(seances).forEach(seance=>{
+    if (!seance || !seance.sequences) return;
+    seance.sequences.forEach(seq=>{
+      if (!seq.annotations) seq.annotations = [];
+      if (typeof seq.comment !== "string") seq.comment = "";
+      if (typeof seq.ballPosFinal === "undefined") seq.ballPosFinal = null;
+      if (!Array.isArray(seq.sprites)) seq.sprites = [];
+      if (!Array.isArray(seq.materiel)) seq.materiel = [];
+      (seq.arrows||[]).forEach(a=>{ if (typeof a.phase!=="number") a.phase=0; if (typeof a.delayMs!=="number") a.delayMs=0; });
+    });
+  });
+  saveSeancesToLocal(seances);
+  currentSeqEntr = 0;
+
   /* ================= Modes ================= */
   function switchMode(newMode) {
     mode = newMode;
@@ -1021,20 +1139,30 @@ reorderDockPanels();           // impose l'ordre final des blocs
     document.querySelectorAll(".tactic-only:not(.ks-edition-only)").forEach(e => e.style.display = (mode === "tactic" ? "inline-block" : "none"));
     // Masquer explicitement les éléments edition-only en mode tactic (ils seront affichés quand on passe en mode édition)
     document.querySelectorAll(".tactic-only.ks-edition-only").forEach(e => e.style.display = "none");
-    document.querySelectorAll(".compo-only") .forEach(e => e.style.display = (mode === "compo"  ? "inline-block" : "none"));
+    document.querySelectorAll(".compo-only").forEach(e => e.style.display = (mode === "compo" ? "inline-block" : "none"));
+    // Éléments entraînement
+    document.querySelectorAll(".entrainement-only:not(.ks-edition-only)").forEach(e => e.style.display = (mode === "entrainement" ? "inline-block" : "none"));
+    document.querySelectorAll(".entrainement-only.ks-edition-only").forEach(e => e.style.display = "none");
     if (configContainer) configContainer.innerHTML = "";
     drawField();
     KSPro.updateDockVisibilityByMode(mode);
 
     if (mode === "tactic") {
-      updateSimSelect(); updateSeqSelect(); 
- syncCommentBar();
+      updateSimSelect(); updateSeqSelect();
+      syncCommentBar();
       createPlayers(); ensureArrowHeadMarker(); ensureAnalysisMarkers(); drawAnnotations(); attachAdminToolbarEvents();
+    } else if (mode === "entrainement") {
+      updateSeanceSelect(); updateSeqSelectEntr();
+      syncCommentBarEntr();
+      createPlayersEntr(); ensureArrowHeadMarker(); ensureAnalysisMarkers(); drawAnnotationsEntr(); attachEntrainementToolbarEvents();
+      drawMaterielPlacements();
     } else {
       updateCompoSelect(); drawCompoConfigUI(); drawCompoPlayers(); syncCommentBar();
     }
   }
+  const entrainementModeBtn = document.getElementById("entrainementModeBtn");
   if (tacticModeBtn) tacticModeBtn.onclick = () => switchMode("tactic");
+  if (entrainementModeBtn) entrainementModeBtn.onclick = () => switchMode("entrainement");
   if (compoModeBtn)  compoModeBtn.onclick  = () => switchMode("compo");
   if (toolMoveBtn) toolMoveBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MOVE));
   if (toolArrowBtn) toolArrowBtn.addEventListener("click", ()=> setInteractionTool(TOOL_ARROW));
@@ -1151,11 +1279,17 @@ reorderDockPanels();           // impose l'ordre final des blocs
   setInteractionTool(TOOL_ARROW);
 
   /* ================= UI communes ================= */
+  function getTerrainImage() {
+    if (mode === "tactic") return "terrain 1 avec foule.png";
+    if (mode === "entrainement") return "entrainement/terrain-entrainement.jpg";
+    return "terrain 2 compo.png";
+  }
+
   function drawField() {
     svg.innerHTML = "";
     const terrainImg = document.createElementNS(svg.namespaceURI, "image");
     terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href",
-      pluginUrl + "assets/" + (mode === "tactic" ? "terrain 1 avec foule.png" : "terrain 2 compo.png"));
+      pluginUrl + "assets/" + getTerrainImage());
     terrainImg.setAttribute("x", 0); terrainImg.setAttribute("y", 0);
     terrainImg.setAttribute("width", 900); terrainImg.setAttribute("height", 600);
     terrainImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
@@ -3662,6 +3796,412 @@ if (style==="rond"){
     }
 
     await stopAndSave(`${currentSim || "Simulation"}-toutes-sequences${showArrows?"":"-sans-fleches"}.webm`);
+  }
+
+  // ================= FONCTIONS MODE ENTRAÎNEMENT =================
+
+  const materielEntrainement = [
+    { id: "piquet", label: "Piquet", src: "entrainement/piquet.png" },
+    { id: "plot_orange", label: "Plot orange", src: "entrainement/plot-orange.png" },
+    { id: "coupelle_rouge", label: "Coupelle rouge", src: "entrainement/coupelle-rouge.png" },
+    { id: "coupelle_bleu", label: "Coupelle bleue", src: "entrainement/coupelle-bleu.png" },
+    { id: "haie", label: "Haie", src: "entrainement/haie.png" },
+    { id: "cerceau_rouge", label: "Cerceau rouge", src: "entrainement/cerceau-rouge.png" },
+    { id: "cerceau_jaune", label: "Cerceau jaune", src: "entrainement/cerceau-jaune.png" },
+    { id: "echelle", label: "Échelle", src: "entrainement/echelle.png" },
+    { id: "mannequin", label: "Mannequin", src: "entrainement/mannequin.png" },
+    { id: "mini_but", label: "Mini but", src: "entrainement/mini-but.png" },
+  ];
+
+  function getDisplayEntr(){
+    if (!seances._display) seances._display = { playerScale: 0.8, labelMode: "numero", labelShadow: true, defaultStyle: "silhouette", defaultCircleColor: "#00bfff" };
+    return seances._display;
+  }
+
+  function ensurePlayerConfigsEntr() {
+    if (!seances[currentSeance]) return;
+    if (!seances[currentSeance].playerConfigs) seances[currentSeance].playerConfigs = [];
+    playerConfigsEntr = seances[currentSeance].playerConfigs;
+  }
+
+  function saveSeances() {
+    seances[currentSeance].playerConfigs = playerConfigsEntr;
+    saveSeancesToLocal(seances);
+    saveSeancesToServer(seances);
+  }
+
+  function updateSeanceSelect() {
+    const sel = document.getElementById("seanceSelect");
+    if (!sel) return;
+    sel.innerHTML = "";
+    Object.keys(seances).filter(k=>k!=="_display").forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name; opt.textContent = name; sel.appendChild(opt);
+    });
+    sel.value = currentSeance;
+  }
+
+  function updateSeqSelectEntr() {
+    const sel = document.getElementById("seqSelectEntr");
+    if (!sel) return;
+    const seqs = seances[currentSeance]?.sequences || [];
+    sel.innerHTML = "";
+    seqs.forEach((seq, i) => {
+      const opt = document.createElement("option");
+      opt.value = i; opt.textContent = seq.name; sel.appendChild(opt);
+    });
+    sel.value = currentSeqEntr;
+  }
+
+  function syncCommentBarEntr(){
+    const area = document.getElementById("ks-seq-comment");
+    const label = document.getElementById("ks-comment-label");
+    if (!area || !label) return;
+    const seq = seances[currentSeance]?.sequences?.[currentSeqEntr];
+    label.textContent = "Commentaire de la séquence";
+    area.placeholder = "Notes, consignes, points clés…";
+    area.disabled = false;
+    area.value = seq?.comment || "";
+    area.onchange = ()=>{ seances[currentSeance].sequences[currentSeqEntr].comment = area.value||""; saveSeances(); };
+  }
+
+  function getPositionsAtSequenceStartEntr(seqIndex) {
+    let positions = JSON.parse(JSON.stringify(seances[currentSeance]?.initialPositions || []));
+    for (let i = 0; i < seqIndex; i++) {
+      const arrows = seances[currentSeance].sequences[i]?.arrows || [];
+      for (let arrow of arrows) {
+        if ((arrow.type === "move_player" || arrow.type === "dribble") && arrow.playerIndex != null && positions[arrow.playerIndex]) {
+          positions[arrow.playerIndex] = { x: arrow.x2, y: arrow.y2 };
+        }
+      }
+    }
+    return positions;
+  }
+
+  function createPlayersEntr(customPositions, seqIndex = currentSeqEntr) {
+    svg.querySelectorAll(".player, .player-silhouette, .player-label, .player-circle").forEach(e => e.remove());
+    playersEntr = [];
+    const positions = customPositions || getPositionsAtSequenceStartEntr(seqIndex);
+    ensurePlayerConfigsEntr();
+    while (playerConfigsEntr.length < positions.length) {
+      playerConfigsEntr.push({ style: getDisplayEntr().defaultStyle||"silhouette", circleColor: getDisplayEntr().defaultCircleColor||"#00bfff", sprite: playerSprites[0].src, num: playerConfigsEntr.length+1, name:"" });
+    }
+    const scale = getDisplayEntr().playerScale || 0.8;
+
+    positions.forEach((pos, i) => {
+      const conf = playerConfigsEntr[i];
+      const style = effStyle(conf);
+      const group = document.createElementNS(svg.namespaceURI, "g");
+      group.classList.add("player");
+      group.dataset.index = i;
+      let w=0,h=0,r=0;
+
+      if (style === "rond"){
+        r = Math.round(22 * scale);
+        const circle = document.createElementNS(svg.namespaceURI, "circle");
+        circle.classList.add("player-circle");
+        circle.setAttribute("cx", pos.x); circle.setAttribute("cy", pos.y);
+        circle.setAttribute("r", r); circle.setAttribute("fill", effCircleColor(conf));
+        group.appendChild(circle);
+      } else {
+        const img = document.createElementNS(svg.namespaceURI, "image");
+        img.classList.add("player-silhouette");
+        w = Math.round(64 * scale); h = Math.round(64 * scale);
+        img.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/" + effSprite(conf));
+        img.setAttribute("x", pos.x - w/2); img.setAttribute("y", pos.y - (h*0.72));
+        img.setAttribute("width", w); img.setAttribute("height", h);
+        group.appendChild(img);
+      }
+
+      const d = getDisplayEntr();
+      const num = conf.num ?? (i+1);
+      let text = d.labelMode==="numero" ? String(num) : d.labelMode==="nom" ? (conf.name||"") : d.labelMode==="both" ? `${num} ${conf.name||""}` : "";
+      if (text){
+        const label = document.createElementNS(svg.namespaceURI, "text");
+        label.classList.add("player-label");
+        if (d.labelShadow) label.classList.add("kas-label-text");
+        label.setAttribute("text-anchor","middle");
+        label.setAttribute("font-size", "12"); label.setAttribute("font-weight", "700"); label.setAttribute("fill", "#fff");
+        label.setAttribute("x", pos.x); label.setAttribute("y", style==="rond" ? (pos.y - (r+8)) : (pos.y - (h*0.86)));
+        label.textContent = text;
+        group.appendChild(label);
+      }
+
+      svg.appendChild(group);
+      playersEntr.push({ group, style, w, h, r });
+    });
+
+    drawArrowsEntr();
+    drawBallEntr();
+  }
+
+  function drawArrowsEntr() {
+    svg.querySelectorAll(".arrow-line-entr").forEach(e => e.remove());
+    if (!arrowsVisibleEntr) return;
+    const seq = seances[currentSeance]?.sequences?.[currentSeqEntr];
+    if (!seq) return;
+    (seq.arrows || []).forEach(arrow => {
+      const line = document.createElementNS(svg.namespaceURI, "line");
+      line.classList.add("arrow-line-entr");
+      line.setAttribute("x1", arrow.x1); line.setAttribute("y1", arrow.y1);
+      line.setAttribute("x2", arrow.x2); line.setAttribute("y2", arrow.y2);
+      line.setAttribute("stroke", getColorByType(arrow.type)); line.setAttribute("stroke-width", 3);
+      line.setAttribute("marker-end", "url(#arrowhead)");
+      if (arrow.type === "pass_air" || arrow.type === "shoot_air") line.setAttribute("stroke-dasharray", "8,4");
+      svg.appendChild(line);
+    });
+  }
+
+  function getBallPositionForSequenceEntr(seqIndex) {
+    const seqs = seances[currentSeance]?.sequences || [];
+    if (!seqs.length) return {x:450, y:300};
+    const seq = seqs[seqIndex];
+    if (seq?.ballPosFinal?.x != null) return seq.ballPosFinal;
+    let base = (seqIndex===0) ? (seq?.ballPos || {x:450,y:300}) : getBallPositionForSequenceEntr(seqIndex-1);
+    const lastBall = (seq?.arrows||[]).filter(a=>["pass_ground","pass_air","shoot_ground","shoot_air","dribble"].includes(a.type)).slice(-1)[0];
+    if (lastBall) base = { x: lastBall.x2, y: lastBall.y2 };
+    return base;
+  }
+
+  function drawBallEntr(customPos) {
+    svg.querySelectorAll(".ball-entr").forEach(e => e.remove());
+    const pos = customPos || getBallPositionForSequenceEntr(currentSeqEntr);
+    const ball = document.createElementNS(svg.namespaceURI, "image");
+    ball.classList.add("ball-entr");
+    ball.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/" + ballSprite);
+    ball.setAttribute("x", pos.x - 12); ball.setAttribute("y", pos.y - 12);
+    ball.setAttribute("width", 24); ball.setAttribute("height", 24);
+    svg.appendChild(ball);
+  }
+
+  function drawAnnotationsEntr() {
+    svg.querySelectorAll(".ks-annotation-entr").forEach(e => e.remove());
+  }
+
+  function drawMaterielPlacements() {
+    svg.querySelectorAll(".materiel-item").forEach(e => e.remove());
+    const seq = seances[currentSeance]?.sequences?.[currentSeqEntr];
+    if (!seq?.materiel) return;
+    seq.materiel.forEach((item, idx) => {
+      const img = document.createElementNS(svg.namespaceURI, "image");
+      img.classList.add("materiel-item");
+      img.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/" + item.src);
+      img.setAttribute("x", item.x - (item.width||30)/2); img.setAttribute("y", item.y - (item.height||30)/2);
+      img.setAttribute("width", item.width || 30); img.setAttribute("height", item.height || 30);
+      img.style.cursor = "move";
+
+      let dragging = false, startX=0, startY=0, origX=item.x, origY=item.y;
+      img.addEventListener("pointerdown", e => {
+        if (interactionMode !== MODE_EDITION) return;
+        e.stopPropagation(); dragging = true;
+        startX = e.clientX; startY = e.clientY; origX = item.x; origY = item.y;
+      });
+      window.addEventListener("pointermove", e => {
+        if (!dragging) return;
+        item.x = origX + e.clientX - startX; item.y = origY + e.clientY - startY;
+        img.setAttribute("x", item.x - (item.width||30)/2); img.setAttribute("y", item.y - (item.height||30)/2);
+      });
+      window.addEventListener("pointerup", () => { if (dragging) { dragging = false; saveSeances(); } });
+      img.addEventListener("dblclick", () => {
+        if (confirm("Supprimer cet élément ?")) { seq.materiel.splice(idx, 1); saveSeances(); drawMaterielPlacements(); }
+      });
+      svg.appendChild(img);
+    });
+  }
+
+  function attachEntrainementToolbarEvents() {
+    const navModeEntr = document.getElementById("mode-navigation-entr");
+    const editModeEntr = document.getElementById("mode-edition-entr");
+    const toolMoveEntr = document.getElementById("tool-move-players-entr");
+    const toolArrowEntr = document.getElementById("tool-draw-arrows-entr");
+    const returnTopEntr = document.getElementById("ks-return-top-entr");
+
+    if (navModeEntr) navModeEntr.onclick = () => setInteractionMode(MODE_NAVIGATION);
+    if (editModeEntr) editModeEntr.onclick = () => setInteractionMode(MODE_EDITION);
+    if (toolMoveEntr) toolMoveEntr.onclick = () => setInteractionTool(TOOL_MOVE);
+    if (toolArrowEntr) toolArrowEntr.onclick = () => setInteractionTool(TOOL_ARROW);
+    if (returnTopEntr) returnTopEntr.onclick = scrollBackToCommands;
+
+    const seanceSelectEl = document.getElementById("seanceSelect");
+    if (seanceSelectEl) seanceSelectEl.onchange = function() {
+      currentSeance = this.value; currentSeqEntr = 0;
+      updateSeqSelectEntr(); drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements();
+    };
+
+    const seqSelectEntrEl = document.getElementById("seqSelectEntr");
+    if (seqSelectEntrEl) seqSelectEntrEl.onchange = function() {
+      currentSeqEntr = parseInt(this.value, 10);
+      drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements();
+    };
+
+    const newSeanceBtn = document.getElementById("newSeanceBtn");
+    if (newSeanceBtn) newSeanceBtn.onclick = function() {
+      const name = prompt("Nom de la séance ?");
+      if (!name || seances[name]) return;
+      seances[name] = { initialPositions: [], sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [], materiel: [] }], playerConfigs: [] };
+      currentSeance = name; currentSeqEntr = 0; playerConfigsEntr = seances[name].playerConfigs;
+      saveSeances(); updateSeanceSelect(); updateSeqSelectEntr(); drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements();
+    };
+
+    const renameSeanceBtn = document.getElementById("renameSeanceBtn");
+    if (renameSeanceBtn) renameSeanceBtn.onclick = function() {
+      const newName = prompt("Nouveau nom ?", currentSeance);
+      if (!newName || newName === currentSeance || seances[newName]) return;
+      seances[newName] = seances[currentSeance]; delete seances[currentSeance]; currentSeance = newName;
+      saveSeances(); updateSeanceSelect();
+    };
+
+    const deleteSeanceBtn = document.getElementById("deleteSeanceBtn");
+    if (deleteSeanceBtn) deleteSeanceBtn.onclick = function() {
+      const keys = Object.keys(seances).filter(k=>k!=="_display");
+      if (keys.length <= 1) { alert("Il doit rester au moins une séance !"); return; }
+      if (!confirm(`Supprimer « ${currentSeance} » ?`)) return;
+      delete seances[currentSeance]; currentSeance = Object.keys(seances).find(k=>k!=="_display"); currentSeqEntr = 0;
+      saveSeances(); updateSeanceSelect(); updateSeqSelectEntr(); drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements();
+    };
+
+    const newSeqBtnEntr = document.getElementById("newSeqBtnEntr");
+    if (newSeqBtnEntr) newSeqBtnEntr.onclick = function() {
+      const name = prompt("Nom de la séquence ?");
+      if (!name) return;
+      seances[currentSeance].sequences.push({ name, arrows: [], comment: "", ballPosFinal:null, annotations: [], sprites: [], materiel: [] });
+      currentSeqEntr = seances[currentSeance].sequences.length - 1;
+      saveSeances(); updateSeqSelectEntr(); drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements();
+    };
+
+    const renameSeqBtnEntr = document.getElementById("renameSeqBtnEntr");
+    if (renameSeqBtnEntr) renameSeqBtnEntr.onclick = function() {
+      const oldName = seances[currentSeance].sequences[currentSeqEntr].name;
+      const name = prompt("Nouveau nom ?", oldName);
+      if (!name || name === oldName) return;
+      seances[currentSeance].sequences[currentSeqEntr].name = name; saveSeances(); updateSeqSelectEntr();
+    };
+
+    const deleteSeqBtnEntr = document.getElementById("deleteSeqBtnEntr");
+    if (deleteSeqBtnEntr) deleteSeqBtnEntr.onclick = function() {
+      const seqs = seances[currentSeance].sequences;
+      if (seqs.length <= 1) { alert("Il doit rester au moins une séquence !"); return; }
+      if (!confirm(`Supprimer « ${seqs[currentSeqEntr].name} » ?`)) return;
+      seqs.splice(currentSeqEntr, 1); currentSeqEntr = 0;
+      saveSeances(); updateSeqSelectEntr(); drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements();
+    };
+
+    const addPlayerBtnEntr = document.getElementById("addPlayerBtnEntr");
+    if (addPlayerBtnEntr) addPlayerBtnEntr.onclick = function() {
+      const s = seances[currentSeance];
+      if (!s.initialPositions) s.initialPositions = [];
+      if (!s.playerConfigs) s.playerConfigs = [];
+      s.initialPositions.push({ x: 450, y: 300 });
+      s.playerConfigs.push({ style: getDisplayEntr().defaultStyle||"silhouette", circleColor: getDisplayEntr().defaultCircleColor||"#00bfff", sprite: playerSprites[0].src, num: s.playerConfigs.length+1, name:"" });
+      saveSeances(); createPlayersEntr();
+    };
+
+    const toggleArrowsBtnEntr = document.getElementById("toggleArrowsBtnEntr");
+    if (toggleArrowsBtnEntr) toggleArrowsBtnEntr.onclick = function() { arrowsVisibleEntr = !arrowsVisibleEntr; drawArrowsEntr(); };
+
+    const clearArrowsBtnEntr = document.getElementById("clearArrowsBtnEntr");
+    if (clearArrowsBtnEntr) clearArrowsBtnEntr.onclick = function() {
+      if (!confirm("Supprimer toutes les flèches ?")) return;
+      seances[currentSeance].sequences[currentSeqEntr].arrows = [];
+      saveSeances(); drawArrowsEntr(); drawBallEntr();
+    };
+
+    const playSeqBtnEntr = document.getElementById("playSeqBtnEntr");
+    if (playSeqBtnEntr) playSeqBtnEntr.onclick = async function() {
+      if (mode !== "entrainement") return;
+      createPlayersEntr(undefined, currentSeqEntr);
+      let pos = await animateSequencePremiumEntr(currentSeqEntr, getPositionsAtSequenceStartEntr(currentSeqEntr));
+      createPlayersEntr(pos, currentSeqEntr); drawBallEntr(getBallPositionForSequenceEntr(currentSeqEntr));
+    };
+
+    const playAllBtnEntr = document.getElementById("playAllBtnEntr");
+    if (playAllBtnEntr) playAllBtnEntr.onclick = async function() {
+      if (mode !== "entrainement") return;
+      let positions = getPositionsAtSequenceStartEntr(0);
+      const seqs = seances[currentSeance].sequences || [];
+      for (let i = 0; i < seqs.length; i++) {
+        createPlayersEntr(positions, i);
+        positions = await animateSequencePremiumEntr(i, positions);
+        await new Promise(r => setTimeout(r, 250));
+      }
+      createPlayersEntr(positions, seqs.length-1); drawBallEntr(getBallPositionForSequenceEntr(seqs.length-1));
+    };
+
+    const showSeqStartBtnEntr = document.getElementById("showSeqStartBtnEntr");
+    if (showSeqStartBtnEntr) showSeqStartBtnEntr.onclick = function() {
+      drawField(); createPlayersEntr(getPositionsAtSequenceStartEntr(currentSeqEntr));
+      drawBallEntr((currentSeqEntr===0) ? (seances[currentSeance].sequences[0].ballPos || {x:450,y:300}) : getBallPositionForSequenceEntr(currentSeqEntr-1));
+      drawMaterielPlacements();
+    };
+
+    const showSeqEndBtnEntr = document.getElementById("showSeqEndBtnEntr");
+    if (showSeqEndBtnEntr) showSeqEndBtnEntr.onclick = function() {
+      let positions = getPositionsAtSequenceStartEntr(currentSeqEntr);
+      (seances[currentSeance].sequences[currentSeqEntr].arrows || []).forEach(arrow => {
+        if ((arrow.type === "move_player" || arrow.type === "dribble") && arrow.playerIndex != null && positions[arrow.playerIndex]) {
+          positions[arrow.playerIndex] = { x: arrow.x2, y: arrow.y2 };
+        }
+      });
+      drawField(); createPlayersEntr(positions); drawBallEntr(getBallPositionForSequenceEntr(currentSeqEntr)); drawMaterielPlacements();
+    };
+
+    const prevSeqBtnEntr = document.getElementById("prevSeqBtnEntr");
+    if (prevSeqBtnEntr) prevSeqBtnEntr.onclick = function() {
+      if (currentSeqEntr > 0) { currentSeqEntr--; document.getElementById("seqSelectEntr").value = currentSeqEntr;
+        drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements(); }
+    };
+
+    const nextSeqBtnEntr = document.getElementById("nextSeqBtnEntr");
+    if (nextSeqBtnEntr) nextSeqBtnEntr.onclick = function() {
+      if (currentSeqEntr < seances[currentSeance].sequences.length - 1) { currentSeqEntr++; document.getElementById("seqSelectEntr").value = currentSeqEntr;
+        drawField(); createPlayersEntr(); syncCommentBarEntr(); drawMaterielPlacements(); }
+    };
+
+    // Boutons de matériel d'entraînement
+    document.querySelectorAll(".ks-materiel-add").forEach(btn => {
+      btn.onclick = function() {
+        const matId = this.dataset.mat;
+        const mat = materielEntrainement.find(m => m.id === matId);
+        if (!mat) return;
+        const seq = seances[currentSeance]?.sequences?.[currentSeqEntr];
+        if (!seq) return;
+        if (!seq.materiel) seq.materiel = [];
+        seq.materiel.push({ id: mat.id, src: mat.src, x: 450, y: 300, width: 40, height: 40 });
+        saveSeances();
+        drawMaterielPlacements();
+      };
+    });
+
+    // Toggle state panneau matériel
+    const materielPanel = document.getElementById("ks-materiel-panel");
+    if (materielPanel) {
+      materielPanel.addEventListener('toggle', e => localStorage.setItem('ks_materiel_open', e.currentTarget.open ? '1':'0'));
+    }
+  }
+
+  async function animateSequencePremiumEntr(seqIndex, startPositions) {
+    let positions = JSON.parse(JSON.stringify(startPositions));
+    const arrows = seances[currentSeance]?.sequences?.[seqIndex]?.arrows || [];
+    for (const arrow of arrows) {
+      if (arrow.type === "move_player" || arrow.type === "dribble") {
+        const idx = arrow.playerIndex;
+        if (idx != null && positions[idx]) {
+          const start = { ...positions[idx] }, end = { x: arrow.x2, y: arrow.y2 }, duration = arrow.delayMs || 500, startTime = performance.now();
+          await new Promise(resolve => {
+            function animate(now) {
+              const progress = Math.min((now - startTime) / duration, 1);
+              positions[idx] = { x: start.x + (end.x - start.x) * progress, y: start.y + (end.y - start.y) * progress };
+              createPlayersEntr(positions, seqIndex);
+              if (progress < 1) requestAnimationFrame(animate); else resolve();
+            }
+            requestAnimationFrame(animate);
+          });
+        }
+      }
+    }
+    seances[currentSeance].sequences[seqIndex].ballPosFinal = getBallPositionForSequenceEntr(seqIndex);
+    saveSeances();
+    return positions;
   }
 
   /* ================= Init ================= */
