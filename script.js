@@ -169,6 +169,31 @@ document.addEventListener("DOMContentLoaded", async function () {
             </div>
           </div>
         </details>
+
+        <!-- Ajout matériel (entraînement) -->
+        <details id="ks-material-panel" class="kas-card" ${ (localStorage.getItem('ks_material_open')==='1') ? 'open' : '' } style="display:none;">
+          <summary id="ks-material-summary">
+            <span class="title">🧰 Ajout matériel (bibliothèque)</span>
+            <span class="hint">Réduire</span>
+          </summary>
+          <div class="kas-grid">
+            <div class="kas-section">
+              <div class="kas-section-title">Taille</div>
+              <div class="kas-row">
+                <label class="kas-inline" style="min-width:240px">
+                  <span style="width:130px;display:inline-block">Échelle</span>
+                  <input id="ks-material-scale" type="range" min="0.5" max="2" step="0.1" value="1" style="flex:1">
+                  <span id="ks-material-scale-val" style="width:48px;text-align:right">1.0</span>
+                </label>
+                <button id="ks-material-collapse" class="kas-btn" type="button">Réduire</button>
+              </div>
+            </div>
+            <div class="kas-section">
+              <div class="kas-section-title">Bibliothèque</div>
+              <div id="ks-material-list" class="kas-row kas-material-row"></div>
+            </div>
+          </div>
+        </details>
       `;
 
       // Insérer AVANT le wrapper scroll (pas dedans) pour éviter le scroll horizontal
@@ -190,8 +215,8 @@ function createSimCommentIfMissing(){
   sim.id = "ks-sim-comment-wrap";
   sim.className = "kas-card";
   sim.innerHTML = `
-    <label class="kas-label" for="ks-sim-comment">Commentaire de la simulation</label>
-    <textarea id="ks-sim-comment" placeholder="Objectif de la simulation, consignes globales…"></textarea>
+    <label class="kas-label" for="ks-sim-comment">${trainingView ? "Commentaire de la séance" : "Commentaire de la simulation"}</label>
+    <textarea id="ks-sim-comment" placeholder="${trainingView ? "Objectif de la séance, consignes globales…" : "Objectif de la simulation, consignes globales…"}"></textarea>
   `;
 
   // par défaut on l’ajoute juste au-dessus du commentaire de séquence
@@ -213,11 +238,12 @@ function reorderDockPanels(){
   const anal = document.getElementById("ks-analysis-panel");   // 🧪 Analyse
   const simc = document.getElementById("ks-sim-comment-wrap"); // 🆕 Commentaire simulation
   const seqc = document.getElementById("ks-comment-wrap");     // Commentaire séquence
+  const mat  = document.getElementById("ks-material-panel");   // Ajout matériel
   const bar  = document.getElementById("ks-controls-bar");     // Barre commandes
 
   // Ordre demandé :
-  // 1) export → 2) affichage → 3) analyse → 4) com. simulation → 5) com. séquence → 6) barre commandes
-  [exp, disp, anal, simc, seqc, bar].forEach(n => { if (n) dock.appendChild(n); });
+  // 1) export → 2) affichage → 3) analyse → 4) com. simulation → 5) com. séquence → 6) matériel → 7) barre commandes
+  [exp, disp, anal, simc, seqc, mat, bar].forEach(n => { if (n) dock.appendChild(n); });
 }
 
 // ===== Barre de commandes compacte, collée au terrain =====
@@ -375,6 +401,7 @@ function moveControlsNearField(){
         .kas-section{border:1px dashed var(--kas-bd);border-radius:10px;padding:10px}
         .kas-section-title{font-weight:600;margin-bottom:6px;color:var(--kas-muted)}
         .kas-row{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+        .kas-material-row{align-items:center}
         .kas-inline{display:inline-flex;align-items:center;gap:6px;font-size:14px;color:var(--kas-fg)}
         .kas-btn{appearance:none;border:1px solid var(--kas-btn-bd);background:var(--kas-btn-bg);color:var(--kas-btn-fg);
           padding:8px 10px;border-radius:10px;cursor:pointer;font:inherit;line-height:1}
@@ -492,6 +519,36 @@ function moveControlsNearField(){
       dock.querySelector('#ks-export-panel').addEventListener('toggle', e=>localStorage.setItem('ks_export_open', e.currentTarget.open ? '1':'0'));
       dock.querySelector('#ks-analysis-panel').addEventListener('toggle', e=>localStorage.setItem('ks_analysis_open', e.currentTarget.open ? '1':'0'));
       dock.querySelector('#ks-display-panel').addEventListener('toggle', e=>localStorage.setItem('ks_display_open', e.currentTarget.open ? '1':'0'));
+      const matPanel = dock.querySelector('#ks-material-panel');
+      if (matPanel){
+        matPanel.addEventListener('toggle', e=>localStorage.setItem('ks_material_open', e.currentTarget.open ? '1':'0'));
+        const list = matPanel.querySelector('#ks-material-list');
+        if (list){
+          list.innerHTML = "";
+          trainingMaterialAssets.forEach(file => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'kas-btn';
+            btn.textContent = file.replace(/\.png$/i, '').replace(/\.jpg$/i, '');
+            btn.addEventListener('click', ()=> addTrainingMaterial(file));
+            list.appendChild(btn);
+          });
+        }
+        const collapseBtn = matPanel.querySelector('#ks-material-collapse');
+        if (collapseBtn) collapseBtn.addEventListener('click', ()=>{ matPanel.open = false; localStorage.setItem('ks_material_open','0'); });
+        const matScale = matPanel.querySelector('#ks-material-scale');
+        const matScaleVal = matPanel.querySelector('#ks-material-scale-val');
+        if (matScale){
+          matScale.addEventListener('input', ()=>{
+            trainingMaterialScale = parseFloat(matScale.value || '1');
+            if (matScaleVal) matScaleVal.textContent = trainingMaterialScale.toFixed(1);
+            if (trainingMaterialSelected){
+              const mat = trainingMaterials.find(m => m.id === trainingMaterialSelected);
+              if (mat){ mat.scale = trainingMaterialScale; renderTrainingMaterials(); }
+            }
+          });
+        }
+      }
 
       // === Bind affichage global ===
       const scaleInput = dock.querySelector("#ks-player-scale");
@@ -583,12 +640,13 @@ defCircle.addEventListener("change", ()=>{
         annotationWidth = Math.max(1, Math.min(12, parseInt(e.target.value||3,10)));
       });
       document.getElementById("ks-annot-del-sel").addEventListener("click", () => deleteSelection());
-      document.getElementById("ks-annot-clear").addEventListener("click", () => clearAnnotations());
+     document.getElementById("ks-annot-clear").addEventListener("click", () => clearAnnotations());
 
      setTimeout(syncDisplayControls, 0);
 moveControlsNearField();       // place le bloc commandes au plus près du terrain
 createSimCommentIfMissing();   // crée le bloc "Commentaire de la simulation"
 reorderDockPanels();           // impose l'ordre final des blocs
+applyTrainingLabels();
 }
 
 
@@ -664,6 +722,11 @@ reorderDockPanels();           // impose l'ordre final des blocs
   let compos = {};
   let currentCompo = "";
   let mode = "tactic";
+  let trainingView = false;
+  let trainingMaterials = [];
+  let trainingMaterialScale = 1;
+  let trainingMaterialLayer = null;
+  let trainingMaterialSelected = null;
   const TOOL_MOVE = "move_players";
   const TOOL_ARROW = "draw_arrows";
   const MODE_NAVIGATION = "navigation";
@@ -730,6 +793,28 @@ reorderDockPanels();           // impose l'ordre final des blocs
   function requestTrainingDeactivate() {
     document.dispatchEvent(new CustomEvent("kas-training-exit", { bubbles: true }));
   }
+  const trainingMaterialAssets = [
+    "ballon.png",
+    "1ballon.png",
+    "plot orange.png",
+    "piquet.png",
+    "piquet jaune.png",
+    "cerceau rouge.png",
+    "cerceau jaune.png",
+    "echelle de rythme jaune horizontale.png",
+    "echelle de rythme verticale rouge.png",
+    "grand but face.png",
+    "mini but face.png",
+    "mini but dos.png",
+    "mini but face profil droit.png",
+    "mini but face profil gauche.png",
+    "mini but dos profil droit.png",
+    "mini but dos profil gauche.png",
+    "manequin mur unique.png",
+    "mannequi mur a 3.png",
+    "hai rouge profil gauche.png",
+    "haie de face.png"
+  ];
 
   function lockFieldScroll(){
     if (fieldScroll) fieldScroll.classList.add("ks-scroll-lock");
@@ -782,6 +867,35 @@ reorderDockPanels();           // impose l'ordre final des blocs
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
     if (fieldScroll) fieldScroll.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function applyTrainingLabels(){
+    const simLabel = document.querySelector("#ks-sim-comment-wrap .kas-label");
+    if (simLabel) simLabel.textContent = trainingView ? "Commentaire de la séance" : "Commentaire de la simulation";
+    const simArea = document.getElementById("ks-sim-comment");
+    if (simArea) simArea.placeholder = trainingView ? "Objectif de la séance, consignes globales…" : "Objectif de la simulation, consignes globales…";
+    const newSimBtn = document.getElementById("newSimBtn");
+    if (newSimBtn) newSimBtn.textContent = trainingView ? "Nouvelle séance" : "Nouvelle simulation";
+    const renameSim = document.getElementById("renameSimBtn");
+    if (renameSim) renameSim.title = trainingView ? "Renommer la séance" : "Renommer la simulation";
+    const deleteSim = document.getElementById("deleteSimBtn");
+    if (deleteSim) deleteSim.title = trainingView ? "Supprimer la séance" : "Supprimer la simulation";
+    const simSelect = document.getElementById("simSelect");
+    if (simSelect) simSelect.title = trainingView ? "Séances" : "Simulations";
+  }
+
+  function setTrainingView(active){
+    trainingView = !!active;
+    const matPanel = document.getElementById("ks-material-panel");
+    if (matPanel) matPanel.style.display = trainingView ? "block" : "none";
+    applyTrainingLabels();
+    renderTrainingMaterials();
+    reorderDockPanels();
+    if (mode === "tactic") {
+      drawField();
+      createPlayers();
+      drawAnnotations();
+    }
   }
 
   const spriteFamilies = [
@@ -1035,6 +1149,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
     }
   }
   if (tacticModeBtn) tacticModeBtn.onclick = () => {
+    setTrainingView(false);
     if (isTrainingActive()) {
       requestTrainingDeactivate();
       setTimeout(()=>{ if (!isTrainingActive()) switchMode("tactic"); }, 20);
@@ -1043,12 +1158,22 @@ reorderDockPanels();           // impose l'ordre final des blocs
     switchMode("tactic");
   };
   if (compoModeBtn)  compoModeBtn.onclick  = () => {
+    setTrainingView(false);
     if (isTrainingActive()) {
       requestTrainingDeactivate();
       setTimeout(()=>{ if (!isTrainingActive()) switchMode("compo"); }, 20);
       return;
     }
     switchMode("compo");
+  };
+  if (trainingModeBtn) trainingModeBtn.onclick = () => {
+    setTrainingView(true);
+    if (isTrainingActive()) {
+      requestTrainingDeactivate();
+      setTimeout(()=>{ if (!isTrainingActive()) switchMode("tactic"); }, 20);
+      return;
+    }
+    switchMode("tactic");
   };
   if (toolMoveBtn) toolMoveBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MOVE));
   if (toolArrowBtn) toolArrowBtn.addEventListener("click", ()=> setInteractionTool(TOOL_ARROW));
@@ -1165,15 +1290,101 @@ reorderDockPanels();           // impose l'ordre final des blocs
   setInteractionTool(TOOL_ARROW);
 
   /* ================= UI communes ================= */
+  function getTerrainImagePath(){
+    if (trainingView) return pluginUrl + "assets/entrainement/" + encodeURIComponent("terrain entrainement.jpg");
+    return pluginUrl + "assets/" + (mode === "tactic" ? "terrain 1 avec foule.png" : "terrain 2 compo.png");
+  }
+
   function drawField() {
     svg.innerHTML = "";
     const terrainImg = document.createElementNS(svg.namespaceURI, "image");
-    terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href",
-      pluginUrl + "assets/" + (mode === "tactic" ? "terrain 1 avec foule.png" : "terrain 2 compo.png"));
+    terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href", getTerrainImagePath());
     terrainImg.setAttribute("x", 0); terrainImg.setAttribute("y", 0);
     terrainImg.setAttribute("width", 900); terrainImg.setAttribute("height", 600);
     terrainImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
     svg.appendChild(terrainImg);
+    ensureMaterialLayer();
+    renderTrainingMaterials();
+  }
+
+  function ensureMaterialLayer(){
+    if (!svg) return;
+    trainingMaterialLayer = svg.querySelector("#ks-training-materials");
+    if (!trainingMaterialLayer){
+      trainingMaterialLayer = document.createElementNS(svg.namespaceURI, "g");
+      trainingMaterialLayer.setAttribute("id", "ks-training-materials");
+      svg.appendChild(trainingMaterialLayer);
+    }
+  }
+
+  function renderTrainingMaterials(){
+    if (!trainingMaterialLayer) return;
+    trainingMaterialLayer.innerHTML = "";
+    if (!trainingView) return;
+    trainingMaterials.forEach(mat => {
+      const img = document.createElementNS(svg.namespaceURI, "image");
+      img.setAttribute("x", mat.x - 40 * mat.scale);
+      img.setAttribute("y", mat.y - 40 * mat.scale);
+      img.setAttribute("width", 80 * mat.scale);
+      img.setAttribute("height", 80 * mat.scale);
+      img.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      img.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/entrainement/" + encodeURIComponent(mat.asset));
+      img.dataset.materialId = mat.id;
+      img.style.cursor = "grab";
+      img.addEventListener("pointerdown", (e)=> startMaterialDrag(e, mat.id));
+      img.addEventListener("click", ()=> selectMaterial(mat.id));
+      trainingMaterialLayer.appendChild(img);
+    });
+  }
+
+  function addTrainingMaterial(asset){
+    trainingMaterials.push({
+      id: `mat_${Date.now()}_${Math.floor(Math.random()*1000)}`,
+      asset,
+      x: 450,
+      y: 300,
+      scale: trainingMaterialScale
+    });
+    renderTrainingMaterials();
+  }
+
+  let materialDragCtx = null;
+  function startMaterialDrag(evt, id){
+    if (!trainingView) return;
+    const mat = trainingMaterials.find(m => m.id === id);
+    if (!mat) return;
+    selectMaterial(id);
+    materialDragCtx = { id, startX: evt.clientX, startY: evt.clientY, baseX: mat.x, baseY: mat.y };
+    window.addEventListener("pointermove", onMaterialDrag);
+    window.addEventListener("pointerup", stopMaterialDrag, { once: true });
+  }
+
+  function onMaterialDrag(evt){
+    if (!materialDragCtx) return;
+    const mat = trainingMaterials.find(m => m.id === materialDragCtx.id);
+    if (!mat) return;
+    const dx = evt.clientX - materialDragCtx.startX;
+    const dy = evt.clientY - materialDragCtx.startY;
+    mat.x = materialDragCtx.baseX + dx;
+    mat.y = materialDragCtx.baseY + dy;
+    renderTrainingMaterials();
+  }
+
+  function stopMaterialDrag(){
+    materialDragCtx = null;
+    window.removeEventListener("pointermove", onMaterialDrag);
+  }
+
+  function selectMaterial(id){
+    trainingMaterialSelected = id;
+    const mat = trainingMaterials.find(m => m.id === id);
+    const scaleInput = document.getElementById("ks-material-scale");
+    const scaleVal = document.getElementById("ks-material-scale-val");
+    if (mat && scaleInput){
+      scaleInput.value = mat.scale;
+      trainingMaterialScale = mat.scale;
+      if (scaleVal) scaleVal.textContent = Number(mat.scale).toFixed(1);
+    }
   }
 
   /* ================= Tactic mode ================= */
@@ -3230,7 +3441,7 @@ box.appendChild(delBtn);
     root.setAttribute("width", "900");
     root.setAttribute("height", "600");
     const bg = document.createElementNS(svgNS, "image");
-    bg.setAttributeNS(xlink, "href", pluginUrl + "assets/" + (mode === "tactic" ? "terrain 1 avec foule.png" : "terrain 2 compo.png"));
+    bg.setAttributeNS(xlink, "href", getTerrainImagePath());
     bg.setAttribute("x", "0"); bg.setAttribute("y", "0");
     bg.setAttribute("width", "900"); bg.setAttribute("height", "600");
     bg.setAttribute("preserveAspectRatio", "xMidYMid slice");
@@ -3576,7 +3787,7 @@ if (style==="rond"){
   /* ================= Vidéo Canvas (fluide) – phases + delays ================= */
   async function loadImageAbs(url){ return await new Promise((ok,ko)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=ko; i.src=url; }); }
   async function preloadCanvasAssetsForSeq(seqIndex){
-    const terrainUrl = pluginUrl + "assets/terrain 1 avec foule.png";
+    const terrainUrl = getTerrainImagePath();
     const ballUrl    = pluginUrl + "assets/" + ballSprite;
     const positions = getPositionsAtSequenceStart(seqIndex);
     ensurePlayerConfigs();
@@ -3855,5 +4066,6 @@ for (let i=0;i<positions.length;i++){
   }
 
   /* ================= Init ================= */
+  setTrainingView(false);
   switchMode("tactic");
 });
