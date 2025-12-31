@@ -4,8 +4,10 @@
   document.addEventListener("DOMContentLoaded", () => {
     const trainingRoot = document.getElementById("training-root");
     const trainingModeBtn = document.getElementById("trainingModeBtn");
-    const svg = document.getElementById("training-svg");
-    if (!trainingRoot || !trainingModeBtn || !svg) return;
+    if (trainingRoot) trainingRoot.style.display = "none";
+    if (!trainingModeBtn) return;
+    // La nouvelle vue Entraînement réutilise le moteur principal (script.js)
+    return;
 
     const pluginUrl = (window.kasendemiVars && window.kasendemiVars.pluginUrl) ? window.kasendemiVars.pluginUrl : "";
     const TRAINING_ASSET_BASE = pluginUrl + "assets/entrainement/";

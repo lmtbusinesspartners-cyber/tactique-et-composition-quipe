@@ -73,8 +73,8 @@ function kasendemi_tactique_admin_page() { ?>
         <!-- 1. BOUTONS DE MODE -->
         <div style="margin-bottom:18px; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; text-align:center;">
             <button id="tacticModeBtn">Schéma tactique</button>
-            <button id="compoModeBtn">Composition d'équipe</button>
             <button id="trainingModeBtn">Entraînement</button>
+            <button id="compoModeBtn">Composition d'équipe</button>
         </div>
 
         <!-- 2. BARRE AVANCÉE -->
