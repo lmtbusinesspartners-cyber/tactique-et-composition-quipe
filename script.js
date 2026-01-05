@@ -727,7 +727,9 @@ reorderDockPanels();           // impose l'ordre final des blocs
       labelShadow: true,
       defaultStyle: "silhouette",
       defaultCircleColor: "#00bfff",
+      terrainType: "stade",
     };
+    if (!simulations._display.terrainType) simulations._display.terrainType = "stade";
     return simulations._display;
   }
 
@@ -1468,13 +1470,17 @@ reorderDockPanels();           // impose l'ordre final des blocs
 
   /* ================= UI communes ================= */
   function drawField() {
+    if (!svg) return;
     svg.innerHTML = "";
     const display = getDisplay();
-    const terrainChoice = (display.terrainType || "stade");
+    const terrainChoice = display.terrainType || "stade";
     const tacticTerrain = TERRAIN_TYPES[terrainChoice] || TERRAIN_TYPES.stade;
+    const resolvedUrl = (pluginUrl || "") + (mode === "tactic" ? tacticTerrain : "assets/terrain 2 compo.png");
+    const safeUrl = resolvedUrl || ((pluginUrl || "") + TERRAIN_TYPES.stade);
+    console.log("Terrain target element:", svg);
+    console.log("Terrain URL resolved:", safeUrl);
     const terrainImg = document.createElementNS(svg.namespaceURI, "image");
-    terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href",
-      pluginUrl + (mode === "tactic" ? tacticTerrain : "assets/terrain 2 compo.png"));
+    terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href", safeUrl);
     terrainImg.setAttribute("x", 0); terrainImg.setAttribute("y", 0);
     terrainImg.setAttribute("width", 900); terrainImg.setAttribute("height", 600);
     terrainImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
