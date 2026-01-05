@@ -46,6 +46,20 @@ document.addEventListener("DOMContentLoaded", async function () {
           </summary>
           <div class="kas-grid">
             <div class="kas-section">
+              <div class="kas-section-title">Type de terrain</div>
+              <div class="kas-row">
+                <label class="kas-inline" style="min-width:260px">
+                  <span style="width:130px;display:inline-block">Type</span>
+                  <select id="ks-terrain-type" style="flex:1;min-width:180px">
+                    <option value="stade">Stade (match)</option>
+                    <option value="entrainement">Entraînement</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="kas-grid">
+            <div class="kas-section">
               <div class="kas-section-title">Taille des joueurs</div>
               <div class="kas-row">
                 <label class="kas-inline" style="min-width:260px">
@@ -299,6 +313,8 @@ function moveControlsNearField(){
   if (clearArr)  clearArr.classList.add("kas-btn", "kas-btn--ghost");
   if (toolMove)  toolMove.classList.add("kas-btn", "kas-btn--ghost", "ks-tool-btn");
   if (toolArrow) toolArrow.classList.add("kas-btn", "kas-btn--primary", "ks-tool-btn");
+  const toolMaterial = document.getElementById("tool-materials");
+  if (toolMaterial) toolMaterial.classList.add("kas-btn", "kas-btn--ghost", "ks-tool-btn");
 
   if (togArrows) {
     togArrows.classList.add("kas-btn", "kas-btn--ghost", "kas-toggle");
@@ -318,6 +334,7 @@ function moveControlsNearField(){
   const row1 = makeRow();
   if (toolMove) row1.appendChild(toolMove);
   if (toolArrow) row1.appendChild(toolArrow);
+  if (toolMaterial) row1.appendChild(toolMaterial);
   if (arrowType) row1.appendChild(arrowType);
   bar.appendChild(row1);
 
@@ -506,6 +523,7 @@ function moveControlsNearField(){
       const labelShadow= dock.querySelector("#ks-label-shadow");
       const defStyle   = dock.querySelector("#ks-default-style");
       const defCircle  = dock.querySelector("#ks-default-circle-color");
+      const terrainType = dock.querySelector("#ks-terrain-type");
 
       function syncDisplayControls(){
         const d = getDisplay();
@@ -515,6 +533,7 @@ function moveControlsNearField(){
         labelShadow.checked = !!d.labelShadow;
         defStyle.value = d.defaultStyle || "silhouette";
         defCircle.value = d.defaultCircleColor || "#00bfff";
+        if (terrainType) terrainType.value = d.terrainType || "stade";
       }
       scaleInput.addEventListener("input", ()=>{
         getDisplay().playerScale = parseFloat(scaleInput.value||"0.8");
@@ -533,6 +552,15 @@ function moveControlsNearField(){
         getDisplay().labelShadow = !!labelShadow.checked;
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
       });
+      if (terrainType){
+        terrainType.addEventListener("change", ()=>{
+          getDisplay().terrainType = terrainType.value || "stade";
+          saveSimulations();
+          drawField();
+          createPlayers();
+          drawAnnotations();
+        });
+      }
      defStyle.addEventListener("change", ()=>{
   getDisplay().defaultStyle = defStyle.value;
 
@@ -671,6 +699,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   let mode = "tactic";
   const TOOL_MOVE = "move_players";
   const TOOL_ARROW = "draw_arrows";
+  const TOOL_MATERIAL = "material";
   const MODE_NAVIGATION = "navigation";
   const MODE_EDITION = "edition";
   let interactionMode = MODE_NAVIGATION;
@@ -728,6 +757,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   const editModeBtn  = document.getElementById("mode-edition");
   const arrowTypeSelect = document.getElementById("arrow-type-select");
   const returnTopBtn = document.getElementById("ks-return-top");
+  const toolMaterialBtn = document.getElementById("tool-materials");
   const editionOnlyEls = document.querySelectorAll(".ks-edition-only");
   const commandsAnchor = document.getElementById("ks-commands-anchor");
   const movementUIRefs = new Map();
@@ -753,9 +783,12 @@ reorderDockPanels();           // impose l'ordre final des blocs
     interactionTool = tool;
     if (toolMoveBtn) toolMoveBtn.dataset.active = tool === TOOL_MOVE ? "1" : "0";
     if (toolArrowBtn) toolArrowBtn.dataset.active = tool === TOOL_ARROW ? "1" : "0";
+    if (toolMaterialBtn) toolMaterialBtn.dataset.active = tool === TOOL_MATERIAL ? "1" : "0";
+    toggleMaterialMode(tool === TOOL_MATERIAL);
     if (svg){
       if (tool === TOOL_MOVE) svg.style.cursor = "grab";
       else if (tool === TOOL_ARROW) svg.style.cursor = "crosshair";
+      else if (tool === TOOL_MATERIAL) svg.style.cursor = "pointer";
       else svg.style.cursor = "default";
     }
   }
@@ -775,8 +808,230 @@ reorderDockPanels();           // impose l'ordre final des blocs
     if (svg) svg.style.touchAction = isEdition ? "none" : (svgBaseTouchAction || "");
 
     const disableTools = !isEdition;
-    [toolMoveBtn, toolArrowBtn, arrowTypeSelect].forEach(btn => { if (btn) btn.disabled = disableTools; });
+    [toolMoveBtn, toolArrowBtn, toolMaterialBtn, arrowTypeSelect].forEach(btn => { if (btn) btn.disabled = disableTools; });
     editionOnlyEls.forEach(el => { if (el) el.style.display = isEdition ? "block" : "none"; });
+  }
+
+  function ensureMaterialLayer(){
+    if (materialLayer || !terrainWrapper) return;
+    materialLayer = document.createElement("div");
+    materialLayer.id = "ks-material-layer";
+    materialLayer.style.position = "absolute";
+    materialLayer.style.top = "0";
+    materialLayer.style.left = "0";
+    materialLayer.style.width = "900px";
+    materialLayer.style.height = "600px";
+    materialLayer.style.pointerEvents = "none";
+    materialLayer.style.zIndex = "3";
+    materialLayer.style.touchAction = "none";
+    terrainWrapper.style.position = "relative";
+    terrainWrapper.appendChild(materialLayer);
+  }
+
+  function ensureMaterialPanel(){
+    if (materialPanel) return;
+    materialPanel = document.createElement("div");
+    materialPanel.id = "ks-material-panel";
+    materialPanel.style.background = "#f8f8fa";
+    materialPanel.style.border = "1px solid #e5e7eb";
+    materialPanel.style.borderRadius = "10px";
+    materialPanel.style.padding = "10px";
+    materialPanel.style.margin = "10px 0";
+    materialPanel.style.boxShadow = "0 1px 6px #0001";
+    materialPanel.style.display = "none";
+
+    const header = document.createElement("div");
+    header.style.display = "flex";
+    header.style.alignItems = "center";
+    header.style.justifyContent = "space-between";
+    header.style.gap = "8px";
+
+    const title = document.createElement("div");
+    title.textContent = "Ajout matériel";
+    title.style.fontWeight = "700";
+    header.appendChild(title);
+
+    materialCollapseBtn = document.createElement("button");
+    materialCollapseBtn.textContent = materialsCollapsed ? "Afficher" : "Masquer";
+    materialCollapseBtn.className = "kas-btn kas-btn--ghost";
+    materialCollapseBtn.style.marginLeft = "auto";
+    materialCollapseBtn.addEventListener("click", ()=>{
+      materialsCollapsed = !materialsCollapsed;
+      localStorage.setItem("ks_materials_collapsed", materialsCollapsed ? "1" : "0");
+      materialCollapseBtn.textContent = materialsCollapsed ? "Afficher" : "Masquer";
+      if (materialPanelBody) materialPanelBody.style.display = materialsCollapsed ? "none" : "grid";
+    });
+    header.appendChild(materialCollapseBtn);
+    materialPanel.appendChild(header);
+
+    materialPanelBody = document.createElement("div");
+    materialPanelBody.style.display = materialsCollapsed ? "none" : "grid";
+    materialPanelBody.style.gridTemplateColumns = "repeat(auto-fill, minmax(70px, 1fr))";
+    materialPanelBody.style.gap = "8px";
+    materialPanelBody.style.marginTop = "10px";
+    materialPanel.appendChild(materialPanelBody);
+
+    materialLibrary = document.createElement("div");
+    materialLibrary.style.display = "contents";
+    materialPanelBody.appendChild(materialLibrary);
+
+    const scaleWrap = document.createElement("div");
+    scaleWrap.style.gridColumn = "1 / -1";
+    scaleWrap.style.display = "flex";
+    scaleWrap.style.alignItems = "center";
+    scaleWrap.style.gap = "8px";
+
+    const scaleLabel = document.createElement("span");
+    scaleLabel.textContent = "Taille";
+    scaleWrap.appendChild(scaleLabel);
+
+    materialScaleInput = document.createElement("input");
+    materialScaleInput.type = "range";
+    materialScaleInput.min = "0.5";
+    materialScaleInput.max = "2";
+    materialScaleInput.step = "0.1";
+    materialScaleInput.value = "1";
+    materialScaleInput.style.flex = "1";
+    materialScaleInput.addEventListener("input", ()=>{
+      const sel = getSelectedMaterial();
+      if (!sel) return;
+      sel.scale = parseFloat(materialScaleInput.value || "1");
+      materialScaleVal.textContent = `x${sel.scale.toFixed(1)}`;
+      renderMaterialItem(sel);
+    });
+    scaleWrap.appendChild(materialScaleInput);
+
+    materialScaleVal = document.createElement("span");
+    materialScaleVal.textContent = "x1.0";
+    scaleWrap.appendChild(materialScaleVal);
+
+    materialPanelBody.appendChild(scaleWrap);
+
+    const scrollWrapper = document.getElementById("kas-field-scroll");
+    if (scrollWrapper && scrollWrapper.parentNode){
+      scrollWrapper.parentNode.insertBefore(materialPanel, scrollWrapper);
+    } else {
+      document.body.appendChild(materialPanel);
+    }
+
+    renderMaterialLibrary();
+  }
+
+  function renderMaterialLibrary(){
+    if (!materialLibrary) return;
+    materialLibrary.innerHTML = "";
+    MATERIAL_ITEMS.forEach(src => {
+      const btn = document.createElement("button");
+      btn.className = "kas-btn kas-btn--ghost";
+      btn.style.padding = "4px";
+      btn.style.display = "flex";
+      btn.style.alignItems = "center";
+      btn.style.justifyContent = "center";
+      btn.style.height = "70px";
+      btn.style.borderRadius = "10px";
+
+      const img = document.createElement("img");
+      img.src = pluginUrl + MATERIAL_ASSET_BASE + encodeURIComponent(src);
+      img.alt = src;
+      img.style.maxWidth = "100%";
+      img.style.maxHeight = "100%";
+      img.loading = "lazy";
+      btn.appendChild(img);
+
+      btn.addEventListener("click", ()=>{
+        addMaterialObject(src);
+      });
+      materialLibrary.appendChild(btn);
+    });
+  }
+
+  function addMaterialObject(src){
+    ensureMaterialLayer();
+    const id = `mat-${Date.now()}-${Math.round(Math.random()*1000)}`;
+    const obj = { id, src, x: 450, y: 300, scale: 1 };
+    materialObjects.push(obj);
+    renderMaterialItem(obj);
+    selectMaterial(id);
+  }
+
+  function getSelectedMaterial(){
+    if (!selectedMaterialId) return null;
+    return materialObjects.find(o => o.id === selectedMaterialId) || null;
+  }
+
+  function selectMaterial(id){
+    selectedMaterialId = id;
+    materialObjects.forEach(obj => {
+      const el = materialLayer ? materialLayer.querySelector(`[data-mat-id="${obj.id}"]`) : null;
+      if (el) el.style.outline = obj.id === id ? "2px solid #2563eb" : "none";
+    });
+    const sel = getSelectedMaterial();
+    if (sel && materialScaleInput && materialScaleVal){
+      materialScaleInput.value = String(sel.scale || 1);
+      materialScaleVal.textContent = `x${(sel.scale || 1).toFixed(1)}`;
+    }
+  }
+
+  let materialDragActive = false;
+  function startMaterialDrag(evt, id){
+    if (interactionTool !== TOOL_MATERIAL) return;
+    selectMaterial(id);
+    materialDragActive = true;
+    const moveHandler = (e)=>onMaterialPointerMove(e);
+    const upHandler = ()=>{
+      materialDragActive = false;
+      window.removeEventListener("pointermove", moveHandler);
+      window.removeEventListener("pointerup", upHandler);
+    };
+    window.addEventListener("pointermove", moveHandler);
+    window.addEventListener("pointerup", upHandler);
+    evt.preventDefault();
+  }
+
+  function onMaterialPointerMove(e){
+    if (!materialDragActive || !materialLayer) return;
+    const sel = getSelectedMaterial();
+    if (!sel) return;
+    const rect = materialLayer.getBoundingClientRect();
+    sel.x = Math.max(0, Math.min(900, e.clientX - rect.left));
+    sel.y = Math.max(0, Math.min(600, e.clientY - rect.top));
+    renderMaterialItem(sel);
+  }
+
+  function renderMaterialObjects(){
+    materialObjects.forEach(obj => renderMaterialItem(obj));
+  }
+
+  function renderMaterialItem(obj){
+    if (!materialLayer) return;
+    let el = materialLayer.querySelector(`[data-mat-id="${obj.id}"]`);
+    if (!el){
+      el = document.createElement("img");
+      el.dataset.matId = obj.id;
+      el.src = pluginUrl + MATERIAL_ASSET_BASE + encodeURIComponent(obj.src);
+      el.alt = obj.src;
+      el.style.position = "absolute";
+      el.style.transformOrigin = "50% 50%";
+      el.style.cursor = "grab";
+      el.addEventListener("pointerdown", (evt)=>startMaterialDrag(evt, obj.id));
+      el.addEventListener("click", (evt)=>{ evt.stopPropagation(); selectMaterial(obj.id); });
+      materialLayer.appendChild(el);
+    }
+    const size = 70 * (obj.scale || 1);
+    el.style.width = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.left = `${obj.x}px`;
+    el.style.top = `${obj.y}px`;
+    el.style.transform = "translate(-50%, -50%)";
+    el.style.outline = obj.id === selectedMaterialId ? "2px solid #2563eb" : "none";
+  }
+
+  function toggleMaterialMode(enabled){
+    ensureMaterialPanel();
+    ensureMaterialLayer();
+    if (materialPanel) materialPanel.style.display = enabled ? "block" : "none";
+    if (materialPanelBody) materialPanelBody.style.display = materialsCollapsed ? "none" : "grid";
+    if (materialLayer) materialLayer.style.pointerEvents = enabled ? "auto" : "none";
   }
 
   function scrollBackToCommands(){
@@ -871,6 +1126,47 @@ reorderDockPanels();           // impose l'ordre final des blocs
       ],
     },
   ];
+
+  const TERRAIN_TYPES = {
+    stade: "assets/terrain 1 avec foule.png",
+    entrainement: "assets/entrainement/terrain entrainement.jpg",
+  };
+
+  const MATERIAL_ASSET_BASE = "assets/entrainement/";
+  const MATERIAL_ITEMS = [
+    "ballon.png",
+    "1ballon.png",
+    "plot orange.png",
+    "piquet.png",
+    "piquet jaune.png",
+    "cerceau rouge.png",
+    "cerceau jaune.png",
+    "echelle de rythme jaune horizontale.png",
+    "echelle de rythme verticale rouge.png",
+    "grand but face.png",
+    "mini but face.png",
+    "mini but dos.png",
+    "mini but face profil droit.png",
+    "mini but face profil gauche.png",
+    "mini but dos profil droit.png",
+    "mini but dos profil gauche.png",
+    "manequin mur unique.png",
+    "mannequi mur a 3.png",
+    "hai rouge profil gauche.png",
+    "haie de face.png",
+  ];
+
+  const materialObjects = [];
+  let materialLayer = null;
+  let materialPanel = null;
+  let materialLibrary = null;
+  let materialScaleInput = null;
+  let materialScaleVal = null;
+  let materialCollapseBtn = null;
+  let materialPanelBody = null;
+  let selectedMaterialId = null;
+  let materialsCollapsed = localStorage.getItem("ks_materials_collapsed") === "1";
+  const terrainWrapper = document.getElementById("kas-terrain-wrapper");
   const playerSprites = spriteFamilies.flatMap(f => {
     const baseLabel = f.mainLabel.replace(/\s+Face$/i, "");
     return f.variants.map(v => ({ label: `${baseLabel} – ${v.label}`, src: v.src }));
@@ -1057,6 +1353,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   };
   if (toolMoveBtn) toolMoveBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MOVE));
   if (toolArrowBtn) toolArrowBtn.addEventListener("click", ()=> setInteractionTool(TOOL_ARROW));
+  if (toolMaterialBtn) toolMaterialBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MATERIAL));
   if (navModeBtn) navModeBtn.addEventListener("click", ()=> setInteractionMode(MODE_NAVIGATION));
   if (editModeBtn) editModeBtn.addEventListener("click", ()=> setInteractionMode(MODE_EDITION));
   if (returnTopBtn) returnTopBtn.addEventListener("click", scrollBackToCommands);
@@ -1172,13 +1469,18 @@ reorderDockPanels();           // impose l'ordre final des blocs
   /* ================= UI communes ================= */
   function drawField() {
     svg.innerHTML = "";
+    const display = getDisplay();
+    const terrainChoice = (display.terrainType || "stade");
+    const tacticTerrain = TERRAIN_TYPES[terrainChoice] || TERRAIN_TYPES.stade;
     const terrainImg = document.createElementNS(svg.namespaceURI, "image");
     terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href",
-      pluginUrl + "assets/" + (mode === "tactic" ? "terrain 1 avec foule.png" : "terrain 2 compo.png"));
+      pluginUrl + (mode === "tactic" ? tacticTerrain : "assets/terrain 2 compo.png"));
     terrainImg.setAttribute("x", 0); terrainImg.setAttribute("y", 0);
     terrainImg.setAttribute("width", 900); terrainImg.setAttribute("height", 600);
     terrainImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
     svg.appendChild(terrainImg);
+    ensureMaterialLayer();
+    renderMaterialObjects();
   }
 
   /* ================= Tactic mode ================= */
