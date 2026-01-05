@@ -12,6 +12,11 @@
 
 document.addEventListener("DOMContentLoaded", async function () {
 
+  if (window.ksBoardEngineActive) {
+    console.debug("[kas] Board engine actif, script legacy désactivé");
+    return;
+  }
+
   /* ==================== UI DOCKEE (pas d'overlay) ==================== */
   const KSPro = (function () {
     function init() {
