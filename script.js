@@ -12,11 +12,6 @@
 
 document.addEventListener("DOMContentLoaded", async function () {
 
-  if (window.ksBoardEngineActive) {
-    console.debug("[kas] Board engine actif, script legacy désactivé");
-    return;
-  }
-
   /* ==================== UI DOCKEE (pas d'overlay) ==================== */
   const KSPro = (function () {
     function init() {
@@ -46,28 +41,21 @@ document.addEventListener("DOMContentLoaded", async function () {
           </summary>
           <div class="kas-grid">
             <div class="kas-section">
-              <div class="kas-section-title">Type de terrain</div>
-              <div class="kas-row">
-                <label class="kas-inline" style="min-width:260px">
-                  <span style="width:130px;display:inline-block">Type</span>
-                  <select id="ks-terrain-type" style="flex:1;min-width:180px">
-                    <option value="stade">Stade (match)</option>
-                    <option value="entrainement">Entraînement</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          </div>
-          <div class="kas-grid">
-            <div class="kas-section">
               <div class="kas-section-title">Taille des joueurs</div>
               <div class="kas-row">
                 <label class="kas-inline" style="min-width:260px">
                   <span style="width:130px;display:inline-block">Taille (x)</span>
-                  <input id="ks-player-scale" type="range" min="0.5" max="1.4" step="0.05" value="0.8" style="flex:1">
+                  <input id="ks-player-scale" type="range" min="0.2" max="1.4" step="0.05" value="0.8" style="flex:1">
                   <span id="ks-player-scale-val" style="width:48px;text-align:right">0.80</span>
                 </label>
                 <button id="ks-player-scale-reset" class="kas-btn">Réinitialiser</button>
+              </div>
+              <div class="kas-row" style="margin-top:8px;">
+                <label class="kas-inline" style="min-width:260px">
+                  <span style="width:130px;display:inline-block">Taille ballon</span>
+                  <input id="ks-ball-scale" type="range" min="0.2" max="2.0" step="0.05" value="1" style="flex:1">
+                  <span id="ks-ball-scale-val" style="width:48px;text-align:right">1.00</span>
+                </label>
               </div>
             </div>
 
@@ -313,8 +301,6 @@ function moveControlsNearField(){
   if (clearArr)  clearArr.classList.add("kas-btn", "kas-btn--ghost");
   if (toolMove)  toolMove.classList.add("kas-btn", "kas-btn--ghost", "ks-tool-btn");
   if (toolArrow) toolArrow.classList.add("kas-btn", "kas-btn--primary", "ks-tool-btn");
-  const toolMaterial = document.getElementById("tool-materials");
-  if (toolMaterial) toolMaterial.classList.add("kas-btn", "kas-btn--ghost", "ks-tool-btn");
 
   if (togArrows) {
     togArrows.classList.add("kas-btn", "kas-btn--ghost", "kas-toggle");
@@ -334,7 +320,6 @@ function moveControlsNearField(){
   const row1 = makeRow();
   if (toolMove) row1.appendChild(toolMove);
   if (toolArrow) row1.appendChild(toolArrow);
-  if (toolMaterial) row1.appendChild(toolMaterial);
   if (arrowType) row1.appendChild(arrowType);
   bar.appendChild(row1);
 
@@ -519,30 +504,39 @@ function moveControlsNearField(){
       const scaleInput = dock.querySelector("#ks-player-scale");
       const scaleVal   = dock.querySelector("#ks-player-scale-val");
       const scaleReset = dock.querySelector("#ks-player-scale-reset");
+      const ballScaleInput = dock.querySelector("#ks-ball-scale");
+      const ballScaleVal   = dock.querySelector("#ks-ball-scale-val");
       const labelMode  = dock.querySelector("#ks-label-mode");
       const labelShadow= dock.querySelector("#ks-label-shadow");
       const defStyle   = dock.querySelector("#ks-default-style");
       const defCircle  = dock.querySelector("#ks-default-circle-color");
-      const terrainType = dock.querySelector("#ks-terrain-type");
 
       function syncDisplayControls(){
         const d = getDisplay();
         scaleInput.value = String(d.playerScale || 0.8);
         scaleVal.textContent = (d.playerScale||0.8).toFixed(2);
+        ballScaleInput.value = String(d.ballScale || 1);
+        ballScaleVal.textContent = (d.ballScale||1).toFixed(2);
         labelMode.value = d.labelMode || "numero";
         labelShadow.checked = !!d.labelShadow;
         defStyle.value = d.defaultStyle || "silhouette";
         defCircle.value = d.defaultCircleColor || "#00bfff";
-        if (terrainType) terrainType.value = d.terrainType || "stade";
       }
       scaleInput.addEventListener("input", ()=>{
-        getDisplay().playerScale = parseFloat(scaleInput.value||"0.8");
+        getDisplay().playerScale = clampPlayerScale(parseFloat(scaleInput.value||"0.8"));
+        scaleInput.value = String(getDisplay().playerScale);
         scaleVal.textContent = getDisplay().playerScale.toFixed(2);
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
       });
       scaleReset.addEventListener("click", ()=>{
         getDisplay().playerScale = 0.8; scaleInput.value="0.8"; scaleVal.textContent="0.80";
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
+      });
+      ballScaleInput.addEventListener("input", ()=>{
+        getDisplay().ballScale = clampBallScale(parseFloat(ballScaleInput.value||"1"));
+        ballScaleInput.value = String(getDisplay().ballScale);
+        ballScaleVal.textContent = getDisplay().ballScale.toFixed(2);
+        saveSimulations(); if (mode==="tactic") { drawBall(); drawAnnotations(); }
       });
       labelMode.addEventListener("change", ()=>{
         getDisplay().labelMode = labelMode.value;
@@ -552,15 +546,6 @@ function moveControlsNearField(){
         getDisplay().labelShadow = !!labelShadow.checked;
         saveSimulations(); if (mode==="tactic") { drawField(); createPlayers(); drawAnnotations(); }
       });
-      if (terrainType){
-        terrainType.addEventListener("change", ()=>{
-          getDisplay().terrainType = terrainType.value || "stade";
-          saveSimulations();
-          drawField();
-          createPlayers();
-          drawAnnotations();
-        });
-      }
      defStyle.addEventListener("change", ()=>{
   getDisplay().defaultStyle = defStyle.value;
 
@@ -632,7 +617,6 @@ reorderDockPanels();           // impose l'ordre final des blocs
     }
 
     function onKey(e) {
-      if (isTrainingActive()) return;
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
@@ -699,7 +683,6 @@ reorderDockPanels();           // impose l'ordre final des blocs
   let mode = "tactic";
   const TOOL_MOVE = "move_players";
   const TOOL_ARROW = "draw_arrows";
-  const TOOL_MATERIAL = "material";
   const MODE_NAVIGATION = "navigation";
   const MODE_EDITION = "edition";
   let interactionMode = MODE_NAVIGATION;
@@ -719,6 +702,17 @@ reorderDockPanels();           // impose l'ordre final des blocs
     drawAnnotations();
   }
 
+  function clampPlayerScale(val){
+    const v = parseFloat(val);
+    if (Number.isNaN(v)) return 0.8;
+    return Math.min(1.4, Math.max(0.2, v));
+  }
+  function clampBallScale(val){
+    const v = parseFloat(val);
+    if (Number.isNaN(v)) return 1;
+    return Math.min(2, Math.max(0.2, v));
+  }
+
   // Affichage global persisté dans simulations._display
   function getDisplay(){
     if (!simulations._display) simulations._display = {
@@ -727,9 +721,10 @@ reorderDockPanels();           // impose l'ordre final des blocs
       labelShadow: true,
       defaultStyle: "silhouette",
       defaultCircleColor: "#00bfff",
-      terrainType: "stade",
+      ballScale: 1,
     };
-    if (!simulations._display.terrainType) simulations._display.terrainType = "stade";
+    simulations._display.playerScale = clampPlayerScale(simulations._display.playerScale);
+    simulations._display.ballScale   = clampBallScale(simulations._display.ballScale);
     return simulations._display;
   }
 
@@ -749,7 +744,6 @@ reorderDockPanels();           // impose l'ordre final des blocs
   const configContainer = document.getElementById("config-container");
   const tacticModeBtn = document.getElementById("tacticModeBtn");
   const compoModeBtn  = document.getElementById("compoModeBtn");
-  const trainingModeBtn = document.getElementById("trainingModeBtn");
   const toolMoveBtn   = document.getElementById("tool-move-players");
   const toolArrowBtn  = document.getElementById("tool-draw-arrows");
   const fieldScroll   = document.getElementById("kas-field-scroll");
@@ -759,14 +753,9 @@ reorderDockPanels();           // impose l'ordre final des blocs
   const editModeBtn  = document.getElementById("mode-edition");
   const arrowTypeSelect = document.getElementById("arrow-type-select");
   const returnTopBtn = document.getElementById("ks-return-top");
-  const toolMaterialBtn = document.getElementById("tool-materials");
   const editionOnlyEls = document.querySelectorAll(".ks-edition-only");
   const commandsAnchor = document.getElementById("ks-commands-anchor");
   const movementUIRefs = new Map();
-  const isTrainingActive = () => (document.body && document.body.dataset.ksTraining === "1");
-  function requestTrainingDeactivate() {
-    document.dispatchEvent(new CustomEvent("kas-training-exit", { bubbles: true }));
-  }
 
   function lockFieldScroll(){
     if (fieldScroll) fieldScroll.classList.add("ks-scroll-lock");
@@ -781,22 +770,17 @@ reorderDockPanels();           // impose l'ordre final des blocs
   }
 
   function setInteractionTool(tool){
-    if (isTrainingActive()) return;
     interactionTool = tool;
     if (toolMoveBtn) toolMoveBtn.dataset.active = tool === TOOL_MOVE ? "1" : "0";
     if (toolArrowBtn) toolArrowBtn.dataset.active = tool === TOOL_ARROW ? "1" : "0";
-    if (toolMaterialBtn) toolMaterialBtn.dataset.active = tool === TOOL_MATERIAL ? "1" : "0";
-    toggleMaterialMode(tool === TOOL_MATERIAL);
     if (svg){
       if (tool === TOOL_MOVE) svg.style.cursor = "grab";
       else if (tool === TOOL_ARROW) svg.style.cursor = "crosshair";
-      else if (tool === TOOL_MATERIAL) svg.style.cursor = "pointer";
       else svg.style.cursor = "default";
     }
   }
 
   function setInteractionMode(modeName){
-    if (isTrainingActive()) return;
     interactionMode = modeName;
     const isEdition = interactionMode === MODE_EDITION;
     if (navModeBtn) navModeBtn.dataset.active = isEdition ? "0" : "1";
@@ -810,230 +794,8 @@ reorderDockPanels();           // impose l'ordre final des blocs
     if (svg) svg.style.touchAction = isEdition ? "none" : (svgBaseTouchAction || "");
 
     const disableTools = !isEdition;
-    [toolMoveBtn, toolArrowBtn, toolMaterialBtn, arrowTypeSelect].forEach(btn => { if (btn) btn.disabled = disableTools; });
+    [toolMoveBtn, toolArrowBtn, arrowTypeSelect].forEach(btn => { if (btn) btn.disabled = disableTools; });
     editionOnlyEls.forEach(el => { if (el) el.style.display = isEdition ? "block" : "none"; });
-  }
-
-  function ensureMaterialLayer(){
-    if (materialLayer || !terrainWrapper) return;
-    materialLayer = document.createElement("div");
-    materialLayer.id = "ks-material-layer";
-    materialLayer.style.position = "absolute";
-    materialLayer.style.top = "0";
-    materialLayer.style.left = "0";
-    materialLayer.style.width = "900px";
-    materialLayer.style.height = "600px";
-    materialLayer.style.pointerEvents = "none";
-    materialLayer.style.zIndex = "3";
-    materialLayer.style.touchAction = "none";
-    terrainWrapper.style.position = "relative";
-    terrainWrapper.appendChild(materialLayer);
-  }
-
-  function ensureMaterialPanel(){
-    if (materialPanel) return;
-    materialPanel = document.createElement("div");
-    materialPanel.id = "ks-material-panel";
-    materialPanel.style.background = "#f8f8fa";
-    materialPanel.style.border = "1px solid #e5e7eb";
-    materialPanel.style.borderRadius = "10px";
-    materialPanel.style.padding = "10px";
-    materialPanel.style.margin = "10px 0";
-    materialPanel.style.boxShadow = "0 1px 6px #0001";
-    materialPanel.style.display = "none";
-
-    const header = document.createElement("div");
-    header.style.display = "flex";
-    header.style.alignItems = "center";
-    header.style.justifyContent = "space-between";
-    header.style.gap = "8px";
-
-    const title = document.createElement("div");
-    title.textContent = "Ajout matériel";
-    title.style.fontWeight = "700";
-    header.appendChild(title);
-
-    materialCollapseBtn = document.createElement("button");
-    materialCollapseBtn.textContent = materialsCollapsed ? "Afficher" : "Masquer";
-    materialCollapseBtn.className = "kas-btn kas-btn--ghost";
-    materialCollapseBtn.style.marginLeft = "auto";
-    materialCollapseBtn.addEventListener("click", ()=>{
-      materialsCollapsed = !materialsCollapsed;
-      localStorage.setItem("ks_materials_collapsed", materialsCollapsed ? "1" : "0");
-      materialCollapseBtn.textContent = materialsCollapsed ? "Afficher" : "Masquer";
-      if (materialPanelBody) materialPanelBody.style.display = materialsCollapsed ? "none" : "grid";
-    });
-    header.appendChild(materialCollapseBtn);
-    materialPanel.appendChild(header);
-
-    materialPanelBody = document.createElement("div");
-    materialPanelBody.style.display = materialsCollapsed ? "none" : "grid";
-    materialPanelBody.style.gridTemplateColumns = "repeat(auto-fill, minmax(70px, 1fr))";
-    materialPanelBody.style.gap = "8px";
-    materialPanelBody.style.marginTop = "10px";
-    materialPanel.appendChild(materialPanelBody);
-
-    materialLibrary = document.createElement("div");
-    materialLibrary.style.display = "contents";
-    materialPanelBody.appendChild(materialLibrary);
-
-    const scaleWrap = document.createElement("div");
-    scaleWrap.style.gridColumn = "1 / -1";
-    scaleWrap.style.display = "flex";
-    scaleWrap.style.alignItems = "center";
-    scaleWrap.style.gap = "8px";
-
-    const scaleLabel = document.createElement("span");
-    scaleLabel.textContent = "Taille";
-    scaleWrap.appendChild(scaleLabel);
-
-    materialScaleInput = document.createElement("input");
-    materialScaleInput.type = "range";
-    materialScaleInput.min = "0.5";
-    materialScaleInput.max = "2";
-    materialScaleInput.step = "0.1";
-    materialScaleInput.value = "1";
-    materialScaleInput.style.flex = "1";
-    materialScaleInput.addEventListener("input", ()=>{
-      const sel = getSelectedMaterial();
-      if (!sel) return;
-      sel.scale = parseFloat(materialScaleInput.value || "1");
-      materialScaleVal.textContent = `x${sel.scale.toFixed(1)}`;
-      renderMaterialItem(sel);
-    });
-    scaleWrap.appendChild(materialScaleInput);
-
-    materialScaleVal = document.createElement("span");
-    materialScaleVal.textContent = "x1.0";
-    scaleWrap.appendChild(materialScaleVal);
-
-    materialPanelBody.appendChild(scaleWrap);
-
-    const scrollWrapper = document.getElementById("kas-field-scroll");
-    if (scrollWrapper && scrollWrapper.parentNode){
-      scrollWrapper.parentNode.insertBefore(materialPanel, scrollWrapper);
-    } else {
-      document.body.appendChild(materialPanel);
-    }
-
-    renderMaterialLibrary();
-  }
-
-  function renderMaterialLibrary(){
-    if (!materialLibrary) return;
-    materialLibrary.innerHTML = "";
-    MATERIAL_ITEMS.forEach(src => {
-      const btn = document.createElement("button");
-      btn.className = "kas-btn kas-btn--ghost";
-      btn.style.padding = "4px";
-      btn.style.display = "flex";
-      btn.style.alignItems = "center";
-      btn.style.justifyContent = "center";
-      btn.style.height = "70px";
-      btn.style.borderRadius = "10px";
-
-      const img = document.createElement("img");
-      img.src = pluginUrl + MATERIAL_ASSET_BASE + encodeURIComponent(src);
-      img.alt = src;
-      img.style.maxWidth = "100%";
-      img.style.maxHeight = "100%";
-      img.loading = "lazy";
-      btn.appendChild(img);
-
-      btn.addEventListener("click", ()=>{
-        addMaterialObject(src);
-      });
-      materialLibrary.appendChild(btn);
-    });
-  }
-
-  function addMaterialObject(src){
-    ensureMaterialLayer();
-    const id = `mat-${Date.now()}-${Math.round(Math.random()*1000)}`;
-    const obj = { id, src, x: 450, y: 300, scale: 1 };
-    materialObjects.push(obj);
-    renderMaterialItem(obj);
-    selectMaterial(id);
-  }
-
-  function getSelectedMaterial(){
-    if (!selectedMaterialId) return null;
-    return materialObjects.find(o => o.id === selectedMaterialId) || null;
-  }
-
-  function selectMaterial(id){
-    selectedMaterialId = id;
-    materialObjects.forEach(obj => {
-      const el = materialLayer ? materialLayer.querySelector(`[data-mat-id="${obj.id}"]`) : null;
-      if (el) el.style.outline = obj.id === id ? "2px solid #2563eb" : "none";
-    });
-    const sel = getSelectedMaterial();
-    if (sel && materialScaleInput && materialScaleVal){
-      materialScaleInput.value = String(sel.scale || 1);
-      materialScaleVal.textContent = `x${(sel.scale || 1).toFixed(1)}`;
-    }
-  }
-
-  let materialDragActive = false;
-  function startMaterialDrag(evt, id){
-    if (interactionTool !== TOOL_MATERIAL) return;
-    selectMaterial(id);
-    materialDragActive = true;
-    const moveHandler = (e)=>onMaterialPointerMove(e);
-    const upHandler = ()=>{
-      materialDragActive = false;
-      window.removeEventListener("pointermove", moveHandler);
-      window.removeEventListener("pointerup", upHandler);
-    };
-    window.addEventListener("pointermove", moveHandler);
-    window.addEventListener("pointerup", upHandler);
-    evt.preventDefault();
-  }
-
-  function onMaterialPointerMove(e){
-    if (!materialDragActive || !materialLayer) return;
-    const sel = getSelectedMaterial();
-    if (!sel) return;
-    const rect = materialLayer.getBoundingClientRect();
-    sel.x = Math.max(0, Math.min(900, e.clientX - rect.left));
-    sel.y = Math.max(0, Math.min(600, e.clientY - rect.top));
-    renderMaterialItem(sel);
-  }
-
-  function renderMaterialObjects(){
-    materialObjects.forEach(obj => renderMaterialItem(obj));
-  }
-
-  function renderMaterialItem(obj){
-    if (!materialLayer) return;
-    let el = materialLayer.querySelector(`[data-mat-id="${obj.id}"]`);
-    if (!el){
-      el = document.createElement("img");
-      el.dataset.matId = obj.id;
-      el.src = pluginUrl + MATERIAL_ASSET_BASE + encodeURIComponent(obj.src);
-      el.alt = obj.src;
-      el.style.position = "absolute";
-      el.style.transformOrigin = "50% 50%";
-      el.style.cursor = "grab";
-      el.addEventListener("pointerdown", (evt)=>startMaterialDrag(evt, obj.id));
-      el.addEventListener("click", (evt)=>{ evt.stopPropagation(); selectMaterial(obj.id); });
-      materialLayer.appendChild(el);
-    }
-    const size = 70 * (obj.scale || 1);
-    el.style.width = `${size}px`;
-    el.style.height = `${size}px`;
-    el.style.left = `${obj.x}px`;
-    el.style.top = `${obj.y}px`;
-    el.style.transform = "translate(-50%, -50%)";
-    el.style.outline = obj.id === selectedMaterialId ? "2px solid #2563eb" : "none";
-  }
-
-  function toggleMaterialMode(enabled){
-    ensureMaterialPanel();
-    ensureMaterialLayer();
-    if (materialPanel) materialPanel.style.display = enabled ? "block" : "none";
-    if (materialPanelBody) materialPanelBody.style.display = materialsCollapsed ? "none" : "grid";
-    if (materialLayer) materialLayer.style.pointerEvents = enabled ? "auto" : "none";
   }
 
   function scrollBackToCommands(){
@@ -1128,47 +890,6 @@ reorderDockPanels();           // impose l'ordre final des blocs
       ],
     },
   ];
-
-  const TERRAIN_TYPES = {
-    stade: "assets/terrain 1 avec foule.png",
-    entrainement: "assets/entrainement/terrain entrainement.jpg",
-  };
-
-  const MATERIAL_ASSET_BASE = "assets/entrainement/";
-  const MATERIAL_ITEMS = [
-    "ballon.png",
-    "1ballon.png",
-    "plot orange.png",
-    "piquet.png",
-    "piquet jaune.png",
-    "cerceau rouge.png",
-    "cerceau jaune.png",
-    "echelle de rythme jaune horizontale.png",
-    "echelle de rythme verticale rouge.png",
-    "grand but face.png",
-    "mini but face.png",
-    "mini but dos.png",
-    "mini but face profil droit.png",
-    "mini but face profil gauche.png",
-    "mini but dos profil droit.png",
-    "mini but dos profil gauche.png",
-    "manequin mur unique.png",
-    "mannequi mur a 3.png",
-    "hai rouge profil gauche.png",
-    "haie de face.png",
-  ];
-
-  const materialObjects = [];
-  let materialLayer = null;
-  let materialPanel = null;
-  let materialLibrary = null;
-  let materialScaleInput = null;
-  let materialScaleVal = null;
-  let materialCollapseBtn = null;
-  let materialPanelBody = null;
-  let selectedMaterialId = null;
-  let materialsCollapsed = localStorage.getItem("ks_materials_collapsed") === "1";
-  const terrainWrapper = document.getElementById("kas-terrain-wrapper");
   const playerSprites = spriteFamilies.flatMap(f => {
     const baseLabel = f.mainLabel.replace(/\s+Face$/i, "");
     return f.variants.map(v => ({ label: `${baseLabel} – ${v.label}`, src: v.src }));
@@ -1317,7 +1038,6 @@ reorderDockPanels();           // impose l'ordre final des blocs
 
   /* ================= Modes ================= */
   function switchMode(newMode) {
-    if (isTrainingActive()) return;
     mode = newMode;
     setInteractionMode(MODE_NAVIGATION);
     // Exclure les éléments .ks-edition-only pour qu'ils restent masqués en mode navigation
@@ -1337,25 +1057,10 @@ reorderDockPanels();           // impose l'ordre final des blocs
       updateCompoSelect(); drawCompoConfigUI(); drawCompoPlayers(); syncCommentBar();
     }
   }
-  if (tacticModeBtn) tacticModeBtn.onclick = () => {
-    if (isTrainingActive()) {
-      requestTrainingDeactivate();
-      setTimeout(()=>{ if (!isTrainingActive()) switchMode("tactic"); }, 20);
-      return;
-    }
-    switchMode("tactic");
-  };
-  if (compoModeBtn)  compoModeBtn.onclick  = () => {
-    if (isTrainingActive()) {
-      requestTrainingDeactivate();
-      setTimeout(()=>{ if (!isTrainingActive()) switchMode("compo"); }, 20);
-      return;
-    }
-    switchMode("compo");
-  };
+  if (tacticModeBtn) tacticModeBtn.onclick = () => switchMode("tactic");
+  if (compoModeBtn)  compoModeBtn.onclick  = () => switchMode("compo");
   if (toolMoveBtn) toolMoveBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MOVE));
   if (toolArrowBtn) toolArrowBtn.addEventListener("click", ()=> setInteractionTool(TOOL_ARROW));
-  if (toolMaterialBtn) toolMaterialBtn.addEventListener("click", ()=> setInteractionTool(TOOL_MATERIAL));
   if (navModeBtn) navModeBtn.addEventListener("click", ()=> setInteractionMode(MODE_NAVIGATION));
   if (editModeBtn) editModeBtn.addEventListener("click", ()=> setInteractionMode(MODE_EDITION));
   if (returnTopBtn) returnTopBtn.addEventListener("click", scrollBackToCommands);
@@ -1470,23 +1175,14 @@ reorderDockPanels();           // impose l'ordre final des blocs
 
   /* ================= UI communes ================= */
   function drawField() {
-    if (!svg) return;
     svg.innerHTML = "";
-    const display = getDisplay();
-    const terrainChoice = display.terrainType || "stade";
-    const tacticTerrain = TERRAIN_TYPES[terrainChoice] || TERRAIN_TYPES.stade;
-    const resolvedUrl = (pluginUrl || "") + (mode === "tactic" ? tacticTerrain : "assets/terrain 2 compo.png");
-    const safeUrl = resolvedUrl || ((pluginUrl || "") + TERRAIN_TYPES.stade);
-    console.log("Terrain target element:", svg);
-    console.log("Terrain URL resolved:", safeUrl);
     const terrainImg = document.createElementNS(svg.namespaceURI, "image");
-    terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href", safeUrl);
+    terrainImg.setAttributeNS("http://www.w3.org/1999/xlink", "href",
+      pluginUrl + "assets/" + (mode === "tactic" ? "terrain 1 avec foule.png" : "terrain 2 compo.png"));
     terrainImg.setAttribute("x", 0); terrainImg.setAttribute("y", 0);
     terrainImg.setAttribute("width", 900); terrainImg.setAttribute("height", 600);
     terrainImg.setAttribute("preserveAspectRatio", "xMidYMid slice");
     svg.appendChild(terrainImg);
-    ensureMaterialLayer();
-    renderMaterialObjects();
   }
 
   /* ================= Tactic mode ================= */
@@ -1605,6 +1301,55 @@ function normalizeSequenceSpritesForCurrentSim(){
   sim.sequences.forEach((_, idx)=> ensureSeqSprites(idx));
 }
 /* === FIN INSERTION === */
+function removePlayerAtIndex(index){
+  const sim = simulations[currentSim];
+  if (!sim || !Array.isArray(sim.initialPositions)) return;
+  if (index < 0 || index >= sim.initialPositions.length) return;
+
+  sim.initialPositions.splice(index, 1);
+  if (Array.isArray(sim.playerConfigs)) sim.playerConfigs.splice(index, 1);
+  playerConfigs = sim.playerConfigs || [];
+
+  (sim.sequences || []).forEach(seq => {
+    if (Array.isArray(seq.sprites)) seq.sprites.splice(index, 1);
+    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(index, 1);
+
+    if (Array.isArray(seq.arrows)) {
+      seq.arrows = seq.arrows
+        .filter(a => a.playerIndex !== index)
+        .map(a => {
+          if (a.playerIndex != null && a.playerIndex > index) {
+            return { ...a, playerIndex: a.playerIndex - 1 };
+          }
+          return a;
+        });
+    }
+
+    if (Array.isArray(seq.annotations)) {
+      seq.annotations = seq.annotations
+        .map(ann => {
+          if (ann.kind === "highlight" && ann.playerIndex != null) {
+            if (ann.playerIndex === index) return null;
+            if (ann.playerIndex > index) return { ...ann, playerIndex: ann.playerIndex - 1 };
+          } else if (ann.kind === "connect" && Array.isArray(ann.pair)) {
+            if (ann.pair.includes(index)) return null;
+            const pair = ann.pair.map(p => (p > index ? p - 1 : p));
+            return { ...ann, pair };
+          }
+          return ann;
+        })
+        .filter(Boolean);
+    }
+  });
+
+  saveSimulations();
+  drawField();
+  createPlayers();
+  drawPlayerConfigUI();
+  drawAnnotations();
+  drawArrows();
+  drawBall();
+}
 
   function drawPlayerConfigUI() {
     if (!configContainer) return;
@@ -1796,13 +1541,7 @@ delBtn.innerHTML = `
   </svg>
 `;
 delBtn.onclick = () => {
-  simulations[currentSim].initialPositions.splice(i, 1);
-  simulations[currentSim].playerConfigs.splice(i, 1);
-  (simulations[currentSim].sequences||[]).forEach(seq=>{
-    if (Array.isArray(seq.sprites)) seq.sprites.splice(i,1);
-    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(i,1);
-  });
-  saveSimulations(); createPlayers(); drawPlayerConfigUI();
+  removePlayerAtIndex(i);
 };
 box.appendChild(delBtn);
 
@@ -2923,19 +2662,24 @@ box.appendChild(delBtn);
     else pos = getBallPositionForSequence(currentSeq);
     if (ballPos) pos = ballPos;
 
+    const ballScale = clampBallScale(getDisplay().ballScale || 1);
+    const baseBallSize = 28;
+    const ballSize = baseBallSize * ballScale;
+    const baseHit = Math.max(18, 22 * ballScale);
+
     const group = document.createElementNS(svg.namespaceURI, "g");
     group.classList.add("kas-ball-group");
 
     const hit = document.createElementNS(svg.namespaceURI, "circle");
-    hit.setAttribute("r", 22);
+    hit.setAttribute("r", baseHit);
     hit.setAttribute("fill", "transparent");
     hit.setAttribute("pointer-events", "fill");
     group.appendChild(hit);
 
     const img = document.createElementNS(svg.namespaceURI, "image");
     img.setAttributeNS("http://www.w3.org/1999/xlink", "href", pluginUrl + "assets/" + ballSprite);
-    img.setAttribute("width", 28);
-    img.setAttribute("height", 28);
+    img.setAttribute("width", ballSize);
+    img.setAttribute("height", ballSize);
     img.classList.add("ballon");
     img.style.cursor = "pointer";
     group.appendChild(img);
@@ -2945,15 +2689,15 @@ box.appendChild(delBtn);
       const off = visualOffset || {x:0, y:0};
       hit.setAttribute("cx", x);
       hit.setAttribute("cy", y);
-      img.setAttribute("x", x - 14 + off.x);
-      img.setAttribute("y", y - 14 + off.y);
+      img.setAttribute("x", x - (ballSize/2) + off.x);
+      img.setAttribute("y", y - (ballSize/2) + off.y);
     }
 
     applyBallRender(pos.x, pos.y);
 
     let draggingBall = false, moved = false, startX = 0, startY = 0, orig = { ...pos }, lastPos = { ...pos };
     const dragThreshold = 4;
-    const visualOffset = {x:0, y:-6};
+    const visualOffset = {x:0, y:-6 * ballScale};
 
     const endDrag = (ev) => {
       if (!draggingBall) return;
@@ -3764,10 +3508,12 @@ if (style==="rond"){
     }
 
     const bp = getBallPositionForSequence(seqIndex);
+    const ballScale = clampBallScale(getDisplay().ballScale||1);
+    const ballSize = 28 * ballScale;
     const ball = document.createElementNS(svgNS, "image");
     ball.setAttributeNS(xlink,"href", pluginUrl+"assets/"+ballSprite);
-    ball.setAttribute("x", bp.x-14); ball.setAttribute("y", bp.y-14);
-    ball.setAttribute("width", "28"); ball.setAttribute("height","28");
+    ball.setAttribute("x", bp.x - ballSize/2); ball.setAttribute("y", bp.y - ballSize/2);
+    ball.setAttribute("width", String(ballSize)); ball.setAttribute("height", String(ballSize));
     root.appendChild(ball);
     return root;
   }
@@ -3887,29 +3633,55 @@ if (style==="rond"){
   }
 
   /* ================= Vidéo Canvas (fluide) – phases + delays ================= */
-  async function loadImageAbs(url){ return await new Promise((ok,ko)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=ko; i.src=url; }); }
+  async function loadImageAbs(url){
+    return await new Promise((ok,ko)=>{
+      const i=new Image();
+      i.onload=()=>{
+        if (i.decode) {
+          i.decode().catch(()=>{}).finally(()=>ok(i));
+        } else {
+          ok(i);
+        }
+      };
+      i.onerror=()=>ko(new Error(`Echec chargement asset: ${url}`));
+      i.src=url;
+    });
+  }
+  async function loadImageWithFallback(url, fallbackUrl){
+    try {
+      return await loadImageAbs(url);
+    } catch(err){
+      console.warn(`[kas] Asset manquant, fallback sur face: ${url}`, err);
+      if (fallbackUrl && url !== fallbackUrl) {
+        try { return await loadImageAbs(fallbackUrl); }
+        catch(fbErr){ console.error("[kas] Fallback face indisponible", fbErr); throw fbErr; }
+      }
+      throw err;
+    }
+  }
   async function preloadCanvasAssetsForSeq(seqIndex){
     const terrainUrl = pluginUrl + "assets/terrain 1 avec foule.png";
     const ballUrl    = pluginUrl + "assets/" + ballSprite;
     const positions = getPositionsAtSequenceStart(seqIndex);
     ensurePlayerConfigs();
     const spriteUrls = new Set();
+    const fallbackUrl = pluginUrl + "assets/" + fallbackSprite;
+    spriteUrls.add(fallbackUrl); // toujours disponible pour fallback
     for (let i=0;i<positions.length;i++){
       const conf = playerConfigs[i]||{};
       if ((conf.style||getDisplay().defaultStyle||"silhouette")==="silhouette"){
-        const s = effSeqSprite(conf, seqIndex, i) || playerSprites[0].src;
+        const s = effSeqSprite(conf, seqIndex, i) || fallbackSprite;
         spriteUrls.add(pluginUrl + "assets/" + s);
       }
     }
-    const allUrls = [terrainUrl, ballUrl, ...spriteUrls];
-    const results = await Promise.all(allUrls.map(u=>loadImageAbs(u)));
-    const assets = { terrain: results[0], ball: results[1], sprites: {} };
-    let idx=2;
-    for (const su of spriteUrls) { assets.sprites[su] = results[idx++]; }
+    const assets = { terrain: null, ball: null, sprites: {} };
+    assets.terrain = await loadImageWithFallback(terrainUrl, terrainUrl);
+    assets.ball    = await loadImageWithFallback(ballUrl, ballUrl);
+    for (const su of spriteUrls) { assets.sprites[su] = await loadImageWithFallback(su, fallbackUrl); }
     return assets;
   }
 
-  function startCanvasRecorder(canvas, fps = 50){
+  function startCanvasRecorder(canvas, fps = 60){
     const stream = canvas.captureStream(fps);
     let mime = 'video/webm;codecs=vp9';
     if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
@@ -3930,7 +3702,7 @@ if (style==="rond"){
         rec.stop();
       });
     }
-    rec.start(100);
+    rec.start(Math.round(1000 / fps));
     return { rec, stopAndSave };
   }
 
@@ -4024,8 +3796,9 @@ for (let i=0;i<positions.length;i++){
     ctx.strokeStyle="#fff"; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(positions[i].x, positions[i].y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
   } else {
-    const su = pluginUrl + "assets/" + effSprite(conf);
-    const img = assets.sprites[su];
+    const spriteName = effSeqSprite(conf, seqIndex, i) || fallbackSprite;
+    const su = pluginUrl + "assets/" + spriteName;
+    const img = assets.sprites[su] || assets.sprites[pluginUrl + "assets/" + fallbackSprite];
     if (img){
       const w = Math.round(64*scale), h = Math.round(64*scale);
       ctx.drawImage(img, positions[i].x - w/2, positions[i].y - (h*0.72), w, h);
@@ -4044,7 +3817,9 @@ for (let i=0;i<positions.length;i++){
     }
 
     // Ballon
-    ctx.drawImage(assets.ball, ballPos.x - 14, ballPos.y - 14, 28, 28);
+    const ballScale = clampBallScale(getDisplay().ballScale||1);
+    const ballSize = 28 * ballScale;
+    ctx.drawImage(assets.ball, ballPos.x - ballSize/2, ballPos.y - ballSize/2, ballSize, ballSize);
   }
 
   async function animatePhaseCanvas(seqIndex, positionsIn, ctx, assets, fps, showArrows, phaseVal, initialBallPos){
@@ -4071,10 +3846,14 @@ for (let i=0;i<positions.length;i++){
 
     const frameMs = 1000 / fps;
     let elapsed = 0;
+    let lastTime = performance.now();
 
     return await new Promise(resolve=>{
       const tick = ()=>{
-        elapsed += frameMs;
+        const now = performance.now();
+        const delta = now - lastTime;
+        lastTime = now;
+        elapsed += Math.max(frameMs*0.5, Math.min(delta || frameMs, frameMs*1.5));
         let running = false;
 
         steps.forEach(s=>{
@@ -4108,7 +3887,7 @@ for (let i=0;i<positions.length;i++){
     });
   }
 
-  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 50, showArrows = true){
+  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 60, showArrows = true){
     let positions = JSON.parse(JSON.stringify(startPositions));
     const arrows = (simulations[currentSim]?.sequences?.[seqIndex]?.arrows || []).map(a=>({
       ...a, phase: (typeof a.phase==="number"?a.phase:0)
@@ -4131,13 +3910,13 @@ for (let i=0;i<positions.length;i++){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const { stopAndSave } = startCanvasRecorder(canvas, 50);
-
     const assets = await preloadCanvasAssetsForSeq(currentSeq);
     let positions = getPositionsAtSequenceStart(currentSeq);
-    // premier frame
-    drawFrameCanvas(ctx, assets, positions, (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1)), currentSeq, {showArrows});
-    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 50, showArrows);
+    const initialBall = (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1));
+    // premier frame (assets déjà prêts)
+    drawFrameCanvas(ctx, assets, positions, initialBall, currentSeq, {showArrows});
+    const { stopAndSave } = startCanvasRecorder(canvas, 60);
+    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 60, showArrows);
 
     const simName = currentSim || "Simulation";
     const seqName = (simulations[currentSim]?.sequences?.[currentSeq]?.name) || `Sequence-${currentSeq + 1}`;
@@ -4152,15 +3931,15 @@ for (let i=0;i<positions.length;i++){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const { stopAndSave } = startCanvasRecorder(canvas, 50);
-
     let positions = getPositionsAtSequenceStart(0);
+    const { stopAndSave } = startCanvasRecorder(canvas, 60);
 
     for (let i=0;i<seqs.length;i++){
       const assets = await preloadCanvasAssetsForSeq(i);
-      drawFrameCanvas(ctx, assets, positions, (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1)), i, {showArrows});
+      const initialBall = (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1));
+      drawFrameCanvas(ctx, assets, positions, initialBall, i, {showArrows});
       await new Promise(r=>setTimeout(r,120));
-      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 50, showArrows);
+      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 60, showArrows);
       await new Promise(r=>setTimeout(r,120));
     }
 

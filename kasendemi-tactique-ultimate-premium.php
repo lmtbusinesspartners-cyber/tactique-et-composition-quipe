@@ -76,7 +76,7 @@ function kasendemi_tactique_admin_page() { ?>
         </div>
 
         <!-- 2. BARRE AVANCÉE -->
-        <div id="toolbar-advanced" style="display:none; margin-bottom:8px; gap:10px; flex-wrap:wrap; justify-content:center; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box;">
+        <div id="toolbar-advanced" style="margin-bottom:8px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box;">
             <button id="addPlayerBtn" class="tactic-only">Ajouter un joueur</button>
             <button id="newSimBtn" class="tactic-only">Nouvelle simulation</button>
             <button id="renameSimBtn" class="tactic-only" title="Renommer simulation">✏️</button>
@@ -90,7 +90,6 @@ function kasendemi_tactique_admin_page() { ?>
             <button id="mode-edition" class="tactic-only">Mode Édition</button>
             <button id="tool-move-players" class="tactic-only">Déplacer joueurs</button>
             <button id="tool-draw-arrows" class="tactic-only">Flèches / Mouvements</button>
-            <button id="tool-materials" class="tactic-only">Matériel</button>
             <!-- ICI : type de flèche dans la barre avancée -->
             <select id="arrow-type-select" class="tactic-only" style="min-width:110px;">
                 <option value="move_player">Déplacement</option>
@@ -111,7 +110,7 @@ function kasendemi_tactique_admin_page() { ?>
         <button id="ks-return-top" class="tactic-only ks-edition-only ks-floating-return" style="display:none;">⬆ Retour commandes</button>
 
         <!-- 3. BARRE PRINCIPALE (lecture) -->
-        <div id="toolbar-main" style="display:none; margin-bottom:10px; gap:10px; flex-wrap:wrap; justify-content:center; background:#f8f8fa; border-radius:10px; box-shadow:0 1px 7px #0001; padding:6px; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; overflow-x:hidden;">
+        <div id="toolbar-main" style="margin-bottom:10px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; background:#f8f8fa; border-radius:10px; box-shadow:0 1px 7px #0001; padding:6px; width:100%; max-width:calc(100vw - 36px); box-sizing:border-box; overflow-x:hidden;">
             <button id="playSeqBtn" class="tactic-only">▶ Séquence</button>
             <button id="playAllBtn" class="tactic-only">▶ Tout</button>
             <button id="showSeqStartBtn" class="tactic-only" title="Début de séquence">Début</button>
@@ -121,7 +120,7 @@ function kasendemi_tactique_admin_page() { ?>
         </div>
 
         <!-- 4. WRAPPER SCROLL : terrain + config (scroll horizontal synchronisé) -->
-        <div id="kas-field-scroll" style="display:none; width:100%; max-width:calc(100vw - 36px); overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; box-sizing:border-box;">
+        <div id="kas-field-scroll" style="width:100%; max-width:calc(100vw - 36px); overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; touch-action:pan-x pan-y; box-sizing:border-box;">
             <!-- CONTENEUR DU TERRAIN avec flèches d'orientation -->
             <div id="kas-terrain-wrapper" style="position:relative; display:inline-block;">
                 <!-- TERRAIN SVG -->
@@ -130,7 +129,6 @@ function kasendemi_tactique_admin_page() { ?>
             <!-- CONFIG CONTAINER (dans le même scroll que le terrain) -->
             <div id="config-container" style="margin-top:20px;width:900px;min-width:900px;"></div>
         </div>
-
     </div>
 <?php }
 
