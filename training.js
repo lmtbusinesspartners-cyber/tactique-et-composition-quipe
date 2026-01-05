@@ -1,44 +1,71 @@
-// Entraînement – moteur dédié (séquences, matériaux, export)
-// Version initiale
+// Moteur partagé Schéma tactique / Entraînement (séquences, matériaux, export)
 (function(){
   document.addEventListener("DOMContentLoaded", () => {
     const trainingRoot = document.getElementById("training-root");
     const trainingModeBtn = document.getElementById("trainingModeBtn");
+    const tacticModeBtn = document.getElementById("tacticModeBtn");
     const svg = document.getElementById("training-svg");
-    if (!trainingRoot || !trainingModeBtn || !svg) return;
+    if (!trainingRoot || !trainingModeBtn || !tacticModeBtn || !svg) return;
 
     const pluginUrl = (window.kasendemiVars && window.kasendemiVars.pluginUrl) ? window.kasendemiVars.pluginUrl : "";
-    const TRAINING_ASSET_BASE = pluginUrl + "assets/entrainement/";
-    const PLAYER_ASSET_BASE = pluginUrl;
-    const assetUrl = (file) => TRAINING_ASSET_BASE + encodeURI(file);
-    const STORAGE_KEY = "ks_training_simulations";
-    const MATERIALS_COLLAPSE_KEY = "ks_training_materials_collapsed";
-    const bgPath = assetUrl("terrain-entrainement.jpg");
-    const bgFallbackPath = TRAINING_ASSET_BASE + encodeURI("terrain entrainement.jpg");
-    const terrainSize = { width: 900, height: 600 };
+    window.ksBoardEngineActive = true;
+    const configs = {
+      tactique: {
+        id: "tactique",
+        terrainUrl: "assets/terrain-stade.png",
+        labels: {
+          session: "Simulation",
+          newSession: "Nouvelle simulation",
+          sessionComment: "Commentaire de la simulation"
+        },
+        enableMateriel: false,
+        materielBasePath: "assets/entrainement/"
+      },
+      entrainement: {
+        id: "entrainement",
+        terrainUrl: "assets/entrainement/terrain entrainement.jpg",
+        labels: {
+          session: "Séance",
+          newSession: "Nouvelle séance",
+          sessionComment: "Commentaire de la séance"
+        },
+        enableMateriel: true,
+        materielBasePath: "assets/entrainement/"
+      }
+    };
 
-    const materials = [
-      "ballon.png",
-      "1ballon.png",
-      "plot orange.png",
-      "piquet.png",
-      "piquet jaune.png",
-      "cerceau rouge.png",
-      "cerceau jaune.png",
-      "echelle de rythme jaune horizontale.png",
-      "echelle de rythme verticale rouge.png",
-      "grand but face.png",
-      "mini but face.png",
-      "mini but dos.png",
-      "mini but face profil droit.png",
-      "mini but face profil gauche.png",
-      "mini but dos profil droit.png",
-      "mini but dos profil gauche.png",
-      "manequin mur unique.png",
-      "mannequi mur a 3.png",
-      "hai rouge profil gauche.png",
-      "haie de face.png"
-    ];
+    const PLAYER_ASSET_BASE = pluginUrl;
+    const MATERIALS_COLLAPSE_KEY = "ks_board_materials_collapsed";
+    const terrainSize = { width: 900, height: 600 };
+    let currentConfig = configs.tactique;
+    const assetUrl = (file, kind = "player") => {
+      if (kind === "material") {
+        return pluginUrl + (currentConfig.materielBasePath || "") + encodeURI(file);
+      }
+      return PLAYER_ASSET_BASE + encodeURI(file);
+    };
+      const materials = [
+        "ballon.png",
+        "1ballon.png",
+        "plot orange.png",
+        "piquet.png",
+        "piquet jaune.png",
+        "cerceau rouge.png",
+        "cerceau jaune.png",
+        "echelle de rythme jaune horizontale.png",
+        "echelle de rythme verticale rouge.png",
+        "grand but face.png",
+        "mini but face.png",
+        "mini but dos.png",
+        "mini but face profil droit.png",
+        "mini but face profil gauche.png",
+        "mini but dos profil droit.png",
+        "mini but dos profil gauche.png",
+        "manequin mur unique.png",
+        "mannequi mur a 3.png",
+        "hai rouge profil gauche.png",
+        "haie de face.png"
+      ];
 
     let view = { x: 0, y: 0, scale: 1 };
     let selectedId = null;
@@ -48,7 +75,9 @@
     let panContext = null;
     let preChangeSnapshot = null;
 
-    const state = loadState();
+    const states = {};
+    const storageKey = (config = currentConfig) => `ks_${config.id}_simulations`;
+    let state = getStateFor(currentConfig);
     let currentSimKey = state.currentSim || Object.keys(state.simulations)[0];
     if (!state.simulations[currentSimKey]) currentSimKey = Object.keys(state.simulations)[0];
     let currentSeqIndex = state.simulations[currentSimKey].currentSeq || 0;
@@ -56,6 +85,7 @@
     let arrowStartId = null;
     let currentArrowType = "move_player";
     let materialsCollapsed = localStorage.getItem(MATERIALS_COLLAPSE_KEY) === "1";
+    document.body.dataset.ksTraining = currentConfig.id === "entrainement" ? "1" : "0";
 
     const els = {
       simSelect: document.getElementById("training-sim-select"),
@@ -88,12 +118,30 @@
       arrowsPanel: document.getElementById("training-arrows-panel")
     };
 
+    function applyLabels(){
+      const lbl = currentConfig.labels;
+      if (els.newSim) els.newSim.textContent = lbl.newSession;
+      if (els.simSelect) els.simSelect.setAttribute("aria-label", lbl.session);
+      if (els.seqSelect) els.seqSelect.setAttribute("aria-label", "Séquence");
+      if (els.toolbarAdvanced) els.toolbarAdvanced.style.display = "none"; // masquer l'ancien dock
+      if (els.toolbarMain) els.toolbarMain.style.display = "none";
+      if (els.fieldScroll) els.fieldScroll.style.display = "none";
+      if (els.uiDock) els.uiDock.style.display = "none";
+      if (els.classicRoot) els.classicRoot.classList.add("ks-board-mode");
+      if (trainingModeBtn) trainingModeBtn.disabled = currentConfig.id === "entrainement";
+      if (tacticModeBtn) tacticModeBtn.disabled = currentConfig.id === "tactique";
+
+      const trainingTitle = trainingRoot.querySelector(".training-toolbar-row .session-label");
+      if (trainingTitle) trainingTitle.textContent = lbl.session;
+    }
+
     const objectsLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
     objectsLayer.setAttribute("id", "training-objects");
     svg.appendChild(objectsLayer);
 
     const toast = createToast();
 
+    applyLabels();
     renderTerrain();
     renderSelectors();
     renderMaterials();
@@ -107,20 +155,26 @@
     attachSvgInteractions();
     attachKeyboard();
 
-    function loadState(){
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) return JSON.parse(raw);
-      } catch(e){ console.warn("Lecture stockage entraînement impossible", e); }
-      return defaultState();
+    function getStateFor(config){
+      if (!states[config.id]) states[config.id] = loadState(config);
+      return states[config.id];
     }
 
-    function defaultState(){
+    function loadState(config){
+      try {
+        const raw = localStorage.getItem(storageKey(config));
+        if (raw) return JSON.parse(raw);
+      } catch(e){ console.warn("Lecture stockage impossible", e); }
+      return defaultState(config);
+    }
+
+    function defaultState(config){
+      const base = config.labels.session || "Séance";
       return {
-        currentSim: "Séance 1",
+        currentSim: `${base} 1`,
         simulations: {
-          "Séance 1": {
-            name: "Séance 1",
+          [`${base} 1`]: {
+            name: `${base} 1`,
             sequences: [{ name: "Séquence 1", objects: [], arrows: [], lastSnapshot: [] }],
             currentSeq: 0
           }
@@ -144,8 +198,8 @@
       try {
         state.currentSim = currentSimKey;
         state.simulations[currentSimKey].currentSeq = currentSeqIndex;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch(e){ console.warn("Sauvegarde entraînement impossible", e); }
+        localStorage.setItem(storageKey(), JSON.stringify(state));
+      } catch(e){ console.warn("Sauvegarde impossible", e); }
     }
 
     function getCurrentSim(){
@@ -162,7 +216,9 @@
     }
 
     function renderTerrain(){
-      console.debug("[training] terrain url", bgPath, "fallback", bgFallbackPath);
+      const bgPath = pluginUrl + currentConfig.terrainUrl.replace(/ /g, "%20");
+      const bgFallbackPath = pluginUrl + encodeURI(currentConfig.terrainUrl);
+      console.debug("[board] terrain url", bgPath, "fallback", bgFallbackPath);
       svg.innerHTML = "";
       const bg = document.createElementNS(svg.namespaceURI, "image");
       bg.setAttribute("x", 0); bg.setAttribute("y", 0);
@@ -171,7 +227,7 @@
       bg.dataset.background = "1";
       bg.setAttributeNS("http://www.w3.org/1999/xlink", "href", bgPath);
       bg.addEventListener("error", () => {
-        console.warn("Fond entraînement manquant: ", bgPath);
+        console.warn("Fond manquant: ", bgPath);
         if (!bg.dataset.fallback && bgFallbackPath){
           bg.dataset.fallback = "1";
           bg.setAttributeNS("http://www.w3.org/1999/xlink", "href", bgFallbackPath);
@@ -218,11 +274,16 @@
 
     function renderMaterials(){
       if (!els.materials) return;
+      if (!currentConfig.enableMateriel){
+        els.materials.style.display = "none";
+        return;
+      }
+      els.materials.style.display = "";
       els.materials.innerHTML = "";
       const header = document.createElement("div");
       header.className = "training-materials-toggle";
       const title = document.createElement("h3");
-      title.textContent = "Bibliothèque de matériels";
+      title.textContent = "Ajout matériel";
       title.style.margin = "0";
       const toggle = document.createElement("button");
       toggle.textContent = materialsCollapsed ? "Ouvrir" : "Réduire";
@@ -238,7 +299,7 @@
       list.className = "training-material-list";
       if (materialsCollapsed) els.materials.classList.add("training-materials-collapsed"); else els.materials.classList.remove("training-materials-collapsed");
       materials.forEach(file => {
-        const url = assetUrl(file);
+        const url = assetUrl(file, "material");
         console.debug("[training] material url", url);
         const card = document.createElement("button");
         card.type = "button";
@@ -507,8 +568,8 @@
     }
 
     function attachUI(){
-      trainingModeBtn.addEventListener("click", ()=> setTrainingActive(true));
-      document.addEventListener("kas-training-exit", ()=> setTrainingActive(false));
+      trainingModeBtn.addEventListener("click", ()=> switchMode(configs.entrainement));
+      tacticModeBtn.addEventListener("click", ()=> switchMode(configs.tactique));
 
       els.simSelect.addEventListener("change", ()=>{
         currentSimKey = els.simSelect.value;
@@ -530,7 +591,8 @@
       });
 
       els.newSim.addEventListener("click", ()=>{
-        const name = prompt("Nom de la nouvelle séance ?", `Séance ${Object.keys(state.simulations).length + 1}`);
+        const base = currentConfig.labels.session || "Séance";
+        const name = prompt(`Nom de la nouvelle ${base.toLowerCase()} ?`, `${base} ${Object.keys(state.simulations).length + 1}`);
         if (!name) return;
         if (state.simulations[name]) { toast.show("Nom déjà utilisé"); return; }
         state.simulations[name] = { name, sequences: [{ name: "Séquence 1", objects: [], lastSnapshot: [] }], currentSeq: 0 };
@@ -540,7 +602,8 @@
 
       els.renameSim.addEventListener("click", ()=>{
         const sim = getCurrentSim();
-        const name = prompt("Renommer la séance", sim.name || currentSimKey);
+        const base = currentConfig.labels.session || "Séance";
+        const name = prompt(`Renommer la ${base.toLowerCase()}`, sim.name || currentSimKey);
         if (!name) return;
         const previous = currentSimKey;
         sim.name = name;
@@ -552,7 +615,8 @@
 
       els.deleteSim.addEventListener("click", ()=>{
         if (Object.keys(state.simulations).length <= 1) { toast.show("Impossible de supprimer la dernière séance"); return; }
-        if (!confirm("Supprimer la séance actuelle ?")) return;
+        const base = currentConfig.labels.session || "Séance";
+        if (!confirm(`Supprimer la ${base.toLowerCase()} actuelle ?`)) return;
         delete state.simulations[currentSimKey];
         currentSimKey = Object.keys(state.simulations)[0];
         currentSeqIndex = state.simulations[currentSimKey].currentSeq || 0;
@@ -599,21 +663,26 @@
       els.exportVideo.addEventListener("click", ()=> exportVideo());
     }
 
-    function setTrainingActive(active){
-      document.body.dataset.ksTraining = active ? "1" : "0";
-      trainingRoot.style.display = active ? "block" : "none";
-      [els.toolbarAdvanced, els.toolbarMain, els.fieldScroll, els.uiDock, els.returnTop].forEach(node => {
-        if (!node) return;
-        node.dataset.trainingHidden = active ? "1" : "0";
-        node.style.display = active ? "none" : "";
-      });
-      if (!active){
-        selectedId = null;
-        drawObjects();
-        renderSelectionPanel();
-        renderPlayersPanel();
-        renderArrowsPanel();
-      }
+    function switchMode(config){
+      if (!config || config.id === currentConfig.id) return;
+      currentConfig = config;
+      state = getStateFor(config);
+      currentSimKey = state.currentSim || Object.keys(state.simulations)[0];
+      if (!state.simulations[currentSimKey]) currentSimKey = Object.keys(state.simulations)[0];
+      currentSeqIndex = state.simulations[currentSimKey].currentSeq || 0;
+      materialsCollapsed = localStorage.getItem(MATERIALS_COLLAPSE_KEY) === "1";
+      document.body.dataset.ksTraining = config.id === "entrainement" ? "1" : "0";
+      if (trainingModeBtn) trainingModeBtn.disabled = config.id === "entrainement";
+      if (tacticModeBtn) tacticModeBtn.disabled = config.id === "tactique";
+      applyLabels();
+      renderTerrain();
+      renderSelectors();
+      renderMaterials();
+      renderSequencePanel();
+      renderSelectionPanel();
+      renderPlayersPanel();
+      renderArrowsPanel();
+      drawObjects();
     }
 
     function navigateSeq(delta){
@@ -704,7 +773,7 @@
           g.appendChild(img);
         } else {
           const img = document.createElementNS(svg.namespaceURI, "image");
-          img.setAttribute("href", assetUrl(obj.asset));
+          img.setAttribute("href", assetUrl(obj.asset, "material"));
           img.setAttribute("x", -(obj.w||80)/2);
           img.setAttribute("y", -(obj.h||80)/2);
           img.setAttribute("width", obj.w||80);
@@ -989,7 +1058,7 @@
           g.appendChild(label);
         } else {
           const img = document.createElementNS(svg.namespaceURI, "image");
-          img.setAttribute("href", assetUrl(obj.asset));
+          img.setAttribute("href", assetUrl(obj.asset, "material"));
           img.setAttribute("x", -(obj.w||80)/2);
           img.setAttribute("y", -(obj.h||80)/2);
           img.setAttribute("width", obj.w||80);
@@ -1032,6 +1101,8 @@
       canvas.width = terrainSize.width; canvas.height = terrainSize.height;
       const ctx = existingCtx || canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const bgPath = pluginUrl + currentConfig.terrainUrl.replace(/ /g, "%20");
+      const bgFallbackPath = pluginUrl + encodeURI(currentConfig.terrainUrl);
       const bg = await getImage(bgPath, bgFallbackPath);
       if (bg) ctx.drawImage(bg, 0, 0, canvas.width, canvas.height); else {
         ctx.fillStyle = "#0f2c19"; ctx.fillRect(0,0,canvas.width, canvas.height);
@@ -1046,7 +1117,7 @@
           const sizeH = (obj.h||90) * (obj.scale||1);
           if (sprite) ctx.drawImage(sprite, -sizeW/2, -sizeH/2, sizeW, sizeH);
         } else {
-          const img = await getImage(assetUrl(obj.asset), pluginUrl + encodeURI(obj.asset));
+          const img = await getImage(assetUrl(obj.asset, "material"), pluginUrl + (currentConfig.materielBasePath || "") + encodeURI(obj.asset));
           const sizeW = (obj.w||80) * (obj.scale||1);
           const sizeH = (obj.h||80) * (obj.scale||1);
           if (img) {

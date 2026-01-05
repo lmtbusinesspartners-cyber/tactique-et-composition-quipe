@@ -155,7 +155,7 @@ input[type="number"] {
 }
 
 /* Mode bouton de switch (compo/tactique) plus visible */
-#tacticModeBtn, #compoModeBtn, #trainingModeBtn {
+#tacticModeBtn, #compoModeBtn {
   padding: 10px 22px;
   border-radius: 7px;
   border: none;
@@ -168,7 +168,7 @@ input[type="number"] {
   letter-spacing: 0.5px;
   transition: background 0.22s, color 0.22s;
 }
-#tacticModeBtn:hover, #compoModeBtn:hover, #trainingModeBtn:hover {
+#tacticModeBtn:hover, #compoModeBtn:hover {
   background: #ffba3e;
   color: #212b44;
 }
@@ -238,174 +238,6 @@ svg#kasendemi-svg {
   gap: 6px;
   align-items: center;
   justify-items: center;
-}
-
-/* Entraînement */
-#training-root {
-  background: #f9fafc;
-  border-radius: 12px;
-  box-shadow: 0 2px 16px #0000000c;
-  padding: 10px;
-}
-.training-materials-top {
-  margin-bottom: 12px;
-}
-.training-materials-toggle {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.training-materials-toggle button {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid #dfe3eb;
-  background: #fff;
-  font-weight: 600;
-  cursor: pointer;
-}
-.training-toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.training-toolbar-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-.training-toolbar button,
-.training-toolbar select {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid #dfe3eb;
-  background: #fff;
-  font-weight: 600;
-  cursor: pointer;
-}
-.training-toolbar button:hover {
-  background: #ffe8a0;
-}
-#training-scroll #training-svg {
-  width: 900px;
-  height: 600px;
-  min-width: 900px;
-  min-height: 600px;
-  border-radius: 12px;
-  box-shadow: 0 3px 16px #00000014;
-}
-.training-panels {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-.training-panel {
-  background: #fff;
-  border: 1px solid #e6e8ed;
-  border-radius: 10px;
-  padding: 10px;
-  box-shadow: 0 1px 8px #0000000b;
-}
-.training-panel h3 {
-  margin-top: 0;
-  font-size: 15px;
-}
-.training-material-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
-}
-.training-materials-collapsed .training-material-list {
-  display: none;
-}
-.training-materials-top .training-material-list {
-  grid-auto-flow: column;
-  grid-auto-columns: 150px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-}
-.training-materials-top .training-material {
-  min-width: 140px;
-}
-.training-material {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid #eef0f5;
-  padding: 8px;
-  border-radius: 8px;
-  background: #fafbff;
-  cursor: pointer;
-}
-.training-material:hover {
-  border-color: #ffba3e;
-  background: #fff9e6;
-}
-.training-material img {
-  max-width: 64px;
-  max-height: 64px;
-}
-.training-seq-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.training-seq-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px;
-  border: 1px solid #f0f1f6;
-  border-radius: 8px;
-  background: #fdfdff;
-}
-.training-seq-row[data-active="1"] {
-  border-color: #ffba3e;
-  background: #fff7e0;
-}
-.training-badge {
-  background: #28316b;
-  color: #fff;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 999px;
-}
-.training-selection {
-  stroke: #ffba3e;
-  stroke-width: 2.5;
-  fill: none;
-}
-.training-handle {
-  fill: #fff;
-  stroke: #28316b;
-  stroke-width: 1.5;
-  cursor: pointer;
-}
-.training-handle[data-type="rotate"] {
-  fill: #28316b;
-  stroke: #fff;
-}
-.training-toast {
-  position: fixed;
-  left: 50%;
-  bottom: 16px;
-  transform: translateX(-50%);
-  background: #28316b;
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 10px;
-  box-shadow: 0 4px 14px #0000001a;
-  z-index: 99999;
-  opacity: 0;
-  transition: opacity .2s, transform .2s;
-}
-.training-toast[data-active="1"] {
-  opacity: 1;
-  transform: translate(-50%, -6px);
 }
 
 .ks-pan-controls button {
