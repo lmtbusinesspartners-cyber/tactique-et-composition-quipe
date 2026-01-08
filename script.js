@@ -707,18 +707,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   let _annIdCounter = 1;
 
   /* ================= Constantes UI ================= */
-  const pluginUrl = (() => {
-    if (window.kasendemiVars && window.kasendemiVars.pluginUrl) {
-      return window.kasendemiVars.pluginUrl;
-    }
-    const current = document.currentScript || Array.from(document.scripts).find(s => (s.src || "").includes("script.js"));
-    if (current && current.src) {
-      const url = current.src.split("?")[0];
-      const idx = url.lastIndexOf("/");
-      return idx !== -1 ? url.slice(0, idx + 1) : "";
-    }
-    return "";
-  })();
+  const pluginUrl = window.kasendemiVars ? kasendemiVars.pluginUrl : "";
   const svg = document.getElementById("kasendemi-svg");
   const configContainer = document.getElementById("config-container");
   const tacticModeBtn = document.getElementById("tacticModeBtn");
@@ -734,6 +723,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
   const returnTopBtn = document.getElementById("ks-return-top");
   const editionOnlyEls = document.querySelectorAll(".ks-edition-only");
   const commandsAnchor = document.getElementById("ks-commands-anchor");
+  const movementUIRefs = new Map();
 
   function lockFieldScroll(){
     if (fieldScroll) fieldScroll.classList.add("ks-scroll-lock");
@@ -974,7 +964,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
     simulations = {
       "Simulation 1": {
         initialPositions: [],
-        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [] }],
+        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [], movementSettings: [] }],
         playerConfigs: [],
       },
       _display: { playerScale:0.8, labelMode:"numero", labelShadow:true, defaultStyle:"silhouette", defaultCircleColor:"#00bfff" }
@@ -991,6 +981,7 @@ reorderDockPanels();           // impose l'ordre final des blocs
       if (typeof seq.comment !== "string") seq.comment = "";
       if (typeof seq.ballPosFinal === "undefined") seq.ballPosFinal = null;
       if (!Array.isArray(seq.sprites)) seq.sprites = [];
+      if (!Array.isArray(seq.movementSettings)) seq.movementSettings = [];
       (seq.arrows||[]).forEach(a=>{ if (typeof a.phase!=="number") a.phase=0; if (typeof a.delayMs!=="number") a.delayMs=0; });
     });
   });
@@ -1244,6 +1235,34 @@ function effSeqSprite(conf, seqIndex, playerIndex){
   if (override && validSpriteSet.has(override)) return override;
   return effSprite(conf);
 }
+const defaultMovementSettings = { type: "move_player", vitesse: 900, phase: 0, delayMs: 0 };
+function ensureMovementSettings(seqIndex){
+  const sim = simulations[currentSim];
+  if (!sim || !sim.sequences) return [];
+  const seq = sim.sequences[seqIndex];
+  if (!seq) return [];
+  const targetLen = sim.initialPositions?.length || 0;
+  if (!Array.isArray(seq.movementSettings)) seq.movementSettings = [];
+  while (seq.movementSettings.length < targetLen) seq.movementSettings.push({ ...defaultMovementSettings });
+  if (seq.movementSettings.length > targetLen) seq.movementSettings = seq.movementSettings.slice(0, targetLen);
+  return seq.movementSettings;
+}
+
+function sanitizeMovementSettings(settings){
+  return {
+    type: settings?.type || defaultMovementSettings.type,
+    vitesse: Math.min(6000, Math.max(200, parseInt(settings?.vitesse ?? defaultMovementSettings.vitesse, 10) || defaultMovementSettings.vitesse)),
+    phase: Math.min(99, Math.max(0, parseInt(settings?.phase ?? defaultMovementSettings.phase, 10) || defaultMovementSettings.phase)),
+    delayMs: Math.min(5000, Math.max(0, parseInt(settings?.delayMs ?? defaultMovementSettings.delayMs, 10) || defaultMovementSettings.delayMs)),
+  };
+}
+
+function getMovementSettingsForPlayer(seqIndex, playerIndex){
+  const list = ensureMovementSettings(seqIndex);
+  if (!list[playerIndex]) list[playerIndex] = { ...defaultMovementSettings };
+  list[playerIndex] = sanitizeMovementSettings(list[playerIndex]);
+  return list[playerIndex];
+}
 function normalizeSequenceSpritesForCurrentSim(){
   const sim = simulations[currentSim];
   if (!sim || !sim.sequences) return;
@@ -1254,7 +1273,10 @@ function normalizeSequenceSpritesForCurrentSim(){
   function drawPlayerConfigUI() {
     if (!configContainer) return;
     configContainer.innerHTML = "";
+    movementUIRefs.clear();
     ensurePlayerConfigs();
+    ensureMovementSettings(currentSeq);
+    const seqArrows = simulations[currentSim]?.sequences?.[currentSeq]?.arrows || [];
     for (let i = 0; i < playerConfigs.length; i++) {
       const conf = playerConfigs[i];
       if (typeof conf.style === "undefined") conf.style = getDisplay().defaultStyle || "silhouette";
@@ -1264,7 +1286,7 @@ function normalizeSequenceSpritesForCurrentSim(){
 
       const box = document.createElement("div");
       box.style.background = "#f8f8fa"; box.style.borderRadius = "8px"; box.style.padding = "6px 8px";
-      box.style.margin = "3px 3px"; box.style.display = "inline-flex"; box.style.alignItems="center"; box.style.gap="6px";
+      box.style.margin = "3px 3px"; box.style.display = "inline-flex"; box.style.alignItems="flex-start"; box.style.flexWrap = "wrap"; box.style.gap="8px";
       box.style.fontSize = "12px";
       box.innerHTML = `<span style="font-weight:700;">${i + 1}</span>`;
 
@@ -1413,7 +1435,7 @@ colorCircle.onchange = ()=>{ playerConfigs[i].circleColor = colorCircle.value; s
 colorCircle.disabled = !(conf.overrideStyle ? (selStyle.value==="rond") : (globalStyle==="rond"));
 selStyle.addEventListener("change", ()=> colorCircle.disabled = !(conf.overrideStyle ? (selStyle.value==="rond") : (globalStyle==="rond")));
 box.appendChild(colorCircle);
-     
+
       // Numéro + Nom (identification)
       const numInput = document.createElement("input");
       numInput.type = "number"; numInput.value = conf.num ?? (i+1);
@@ -1440,13 +1462,158 @@ delBtn.innerHTML = `
 delBtn.onclick = () => {
   simulations[currentSim].initialPositions.splice(i, 1);
   simulations[currentSim].playerConfigs.splice(i, 1);
-  (simulations[currentSim].sequences||[]).forEach(seq=>{ if (Array.isArray(seq.sprites)) seq.sprites.splice(i,1); });
+  (simulations[currentSim].sequences||[]).forEach(seq=>{
+    if (Array.isArray(seq.sprites)) seq.sprites.splice(i,1);
+    if (Array.isArray(seq.movementSettings)) seq.movementSettings.splice(i,1);
+  });
   saveSimulations(); createPlayers(); drawPlayerConfigUI();
 };
 box.appendChild(delBtn);
 
+      const moveCol = document.createElement("div");
+      moveCol.className = "kas-move-column";
+      const moveHeader = document.createElement("div");
+      moveHeader.className = "kas-move-header";
+      const moveTitle = document.createElement("span");
+      moveTitle.className = "kas-move-title";
+      moveTitle.textContent = "Timing & vitesse mouvement";
+      const gearBtn = document.createElement("button");
+      gearBtn.type = "button";
+      gearBtn.className = "kas-gear-btn";
+      gearBtn.textContent = "⚙️";
+      moveHeader.appendChild(moveTitle);
+      moveHeader.appendChild(gearBtn);
+      moveCol.appendChild(moveHeader);
+
+      const moveSummary = document.createElement("div");
+      moveSummary.className = "kas-move-summary";
+      const baseMove = getMovementSettingsForPlayer(currentSeq, i);
+      const arrow = seqArrows.find(a => a.playerIndex === i);
+      const effectiveMove = arrow ? sanitizeMovementSettings({ ...baseMove, ...arrow }) : baseMove;
+      ensureMovementSettings(currentSeq)[i] = { ...effectiveMove };
+      const refreshSummary = (vals = effectiveMove) => {
+        moveSummary.textContent = `Vitesse: ${vals.vitesse}ms | Vague: ${vals.phase} | Décalage: ${vals.delayMs}ms`;
+      };
+      refreshSummary();
+      moveCol.appendChild(moveSummary);
+
+      const moveDetails = document.createElement("div");
+      moveDetails.className = "kas-move-details";
+      moveDetails.dataset.open = "0";
+      moveDetails.style.display = "none";
+
+      const typeLabel = document.createElement("label");
+      typeLabel.textContent = "Type de mouvement";
+      const typeSelect = document.createElement("select");
+      [
+        ["move_player", "Déplacement"],
+        ["dribble", "Conduite"],
+        ["pass_ground", "Passe au sol"],
+        ["pass_air", "Passe en l'air"],
+        ["shoot_ground", "Tir au sol"],
+        ["shoot_air", "Tir en l'air"],
+      ].forEach(([val, label]) => {
+        const opt = document.createElement("option");
+        opt.value = val; opt.textContent = label; typeSelect.appendChild(opt);
+      });
+      typeSelect.value = effectiveMove.type || "move_player";
+      typeLabel.appendChild(typeSelect);
+
+      const speedLabel = document.createElement("label");
+      speedLabel.textContent = "Vitesse (ms)";
+      const speedInput = document.createElement("input");
+      speedInput.type = "number"; speedInput.min = 200; speedInput.max = 6000; speedInput.step = 50; speedInput.value = effectiveMove.vitesse;
+      speedLabel.appendChild(speedInput);
+      const speedHelp = document.createElement("div");
+      speedHelp.className = "kas-help";
+      speedHelp.textContent = "200 = très rapide · 2000 = lent";
+
+      const phaseLabel = document.createElement("label");
+      phaseLabel.textContent = "Vague de départ (phase)";
+      const phaseInput = document.createElement("input");
+      phaseInput.type = "number"; phaseInput.min = 0; phaseInput.max = 99; phaseInput.step = 1; phaseInput.value = effectiveMove.phase;
+      phaseLabel.appendChild(phaseInput);
+      const phaseHelp = document.createElement("div");
+      phaseHelp.className = "kas-help";
+      phaseHelp.textContent = "Les flèches d’une même vague partent ensemble (0 à 99).";
+
+      const delayLabel = document.createElement("label");
+      delayLabel.textContent = "Décalage dans la vague (ms)";
+      const delayInput = document.createElement("input");
+      delayInput.type = "number"; delayInput.min = 0; delayInput.max = 5000; delayInput.step = 50; delayInput.value = effectiveMove.delayMs;
+      delayLabel.appendChild(delayInput);
+      const delayHelp = document.createElement("div");
+      delayHelp.className = "kas-help";
+      delayHelp.textContent = "Petit retard par rapport aux autres de la même vague (ex. 200–300 ms).";
+
+      const statusRow = document.createElement("div");
+      statusRow.className = "kas-move-status";
+
+      function storeMovement(values){
+        const merged = sanitizeMovementSettings(values);
+        const list = ensureMovementSettings(currentSeq);
+        list[i] = { ...merged };
+        const linkedArrow = seqArrows.find(a => a.playerIndex === i);
+        if (linkedArrow) {
+          linkedArrow.type = merged.type;
+          linkedArrow.vitesse = merged.vitesse;
+          linkedArrow.phase = merged.phase;
+          linkedArrow.delayMs = merged.delayMs;
+          saveSimulations();
+          drawArrows();
+          drawBall();
+        } else {
+          saveSimulations();
+        }
+        refreshSummary(merged);
+        statusRow.textContent = "Sauvegardé";
+        statusRow.dataset.active = "1";
+        setTimeout(()=>{ statusRow.dataset.active = "0"; }, 1000);
+      }
+
+      [typeSelect, speedInput, phaseInput, delayInput].forEach(ctrl => {
+        ctrl.addEventListener("change", () => {
+          storeMovement({
+            type: typeSelect.value,
+            vitesse: speedInput.value,
+            phase: phaseInput.value,
+            delayMs: delayInput.value,
+          });
+        });
+      });
+
+      moveDetails.appendChild(typeLabel);
+      moveDetails.appendChild(speedLabel);
+      moveDetails.appendChild(speedHelp);
+      moveDetails.appendChild(phaseLabel);
+      moveDetails.appendChild(phaseHelp);
+      moveDetails.appendChild(delayLabel);
+      moveDetails.appendChild(delayHelp);
+      moveDetails.appendChild(statusRow);
+
+      const toggleDetails = (open) => {
+        const shouldOpen = typeof open === "boolean" ? open : moveDetails.dataset.open !== "1";
+        moveDetails.dataset.open = shouldOpen ? "1" : "0";
+        moveDetails.style.display = shouldOpen ? "block" : "none";
+        gearBtn.dataset.open = shouldOpen ? "1" : "0";
+      };
+      gearBtn.addEventListener("click", () => toggleDetails());
+
+      moveCol.appendChild(moveDetails);
+      box.appendChild(moveCol);
+      movementUIRefs.set(i, { open: ()=>toggleDetails(true), summary: refreshSummary, container: box });
+
 
       configContainer.appendChild(box);
+    }
+  }
+
+  function openMovementPanelForPlayer(playerIndex){
+    const ref = movementUIRefs.get(playerIndex);
+    if (!ref) return;
+    if (typeof ref.open === "function") ref.open();
+    if (ref.container && ref.container.scrollIntoView) {
+      ref.container.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }
 
@@ -1706,6 +1873,20 @@ box.appendChild(delBtn);
     }
   }
 
+  function applyMovementDefaultsToArrow(arrow, playerIndex, seqIndex){
+    if (playerIndex == null) return arrow;
+    const base = getMovementSettingsForPlayer(seqIndex, playerIndex);
+    const type = (base.type && base.type !== defaultMovementSettings.type) ? base.type : (arrow.type || base.type);
+    const merged = sanitizeMovementSettings({ ...base, ...arrow, type });
+    arrow.type = merged.type;
+    arrow.vitesse = merged.vitesse;
+    arrow.phase = merged.phase;
+    arrow.delayMs = merged.delayMs;
+    const list = ensureMovementSettings(seqIndex);
+    list[playerIndex] = { ...merged };
+    return arrow;
+  }
+
   // Flèches (clic droit pour créer) + Annotations (clic gauche si activées)
   svg.addEventListener("contextmenu", e => e.preventDefault());
 
@@ -1819,7 +2000,7 @@ box.appendChild(delBtn);
         if (idx !== -1) seq.arrows.splice(idx, 1);
       }
 
-      seq.arrows.push({
+      const newArrow = {
         x1: playerIndex != null ? positions[playerIndex].x : startX,
         y1: playerIndex != null ? positions[playerIndex].y : startY,
         x2: endX, y2: endY,
@@ -1828,9 +2009,11 @@ box.appendChild(delBtn);
         vitesse: 900,
         phase: 0,
         delayMs: 0
-      });
+      };
+      applyMovementDefaultsToArrow(newArrow, playerIndex, currentSeq);
+      seq.arrows.push(newArrow);
       saveSimulations();
-      drawArrows(); drawBall();
+      drawArrows(); drawBall(); drawPlayerConfigUI();
     }
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd);
@@ -2234,52 +2417,48 @@ box.appendChild(delBtn);
   // ====== Flèches visibles (+ zones de clic + badge de phase) ======
   const ARROW_TAP_MAX_MOVEMENT = 10;
   const ARROW_TAP_MAX_DURATION = 400;
-  const arrowTapState = { pointerId: null, startX: 0, startY: 0, startTime: 0, target: null };
 
-  function isArrowTarget(el) {
-    return !!el && (el.classList?.contains("arrow") || el.classList?.contains("arrow-hit") || el.classList?.contains("arrow-hit-end"));
+  function attachArrowTapGesture(target, onTap){
+    let activeId = null;
+    let startX = 0, startY = 0, startTime = 0;
+    let isCandidate = false;
+
+    const reset = () => { activeId = null; isCandidate = false; };
+
+    target.addEventListener("pointerdown", (e) => {
+      if (!e.isPrimary) return;
+      if (e.button !== undefined && e.button !== 0) return;
+      if (isTwoFingerTouch) { reset(); return; }
+      activeId = e.pointerId;
+      startX = e.clientX; startY = e.clientY;
+      startTime = performance.now ? performance.now() : Date.now();
+      isCandidate = true;
+    });
+
+    target.addEventListener("pointermove", (e) => {
+      if (activeId === null || e.pointerId !== activeId) return;
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) > ARROW_TAP_MAX_MOVEMENT) {
+        isCandidate = false;
+      }
+      if (isTwoFingerTouch) {
+        isCandidate = false;
+      }
+    });
+
+    target.addEventListener("pointerup", (e) => {
+      if (activeId === null || e.pointerId !== activeId) return reset();
+      const elapsed = (performance.now ? performance.now() : Date.now()) - startTime;
+      const moved = Math.hypot(e.clientX - startX, e.clientY - startY);
+      if (isCandidate && !isTwoFingerTouch && elapsed <= ARROW_TAP_MAX_DURATION && moved <= ARROW_TAP_MAX_MOVEMENT) {
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        onTap(e);
+      }
+      reset();
+    });
+
+    target.addEventListener("pointercancel", reset);
   }
-
-  function resetArrowTap() {
-    arrowTapState.pointerId = null;
-    arrowTapState.target = null;
-  }
-
-  svg.addEventListener("pointerdown", (e) => {
-    if (!isArrowTarget(e.target)) { resetArrowTap(); return; }
-    if (!e.isPrimary || (e.button !== undefined && e.button !== 0)) { resetArrowTap(); return; }
-    if (isTwoFingerTouch) { resetArrowTap(); return; }
-    arrowTapState.pointerId = e.pointerId;
-    arrowTapState.startX = e.clientX;
-    arrowTapState.startY = e.clientY;
-    arrowTapState.startTime = performance.now ? performance.now() : Date.now();
-    arrowTapState.target = e.target;
-  });
-
-  svg.addEventListener("pointermove", (e) => {
-    if (arrowTapState.pointerId === null || e.pointerId !== arrowTapState.pointerId) return;
-    if (isTwoFingerTouch) { resetArrowTap(); return; }
-    if (Math.hypot(e.clientX - arrowTapState.startX, e.clientY - arrowTapState.startY) > ARROW_TAP_MAX_MOVEMENT) {
-      resetArrowTap();
-    }
-  });
-
-  svg.addEventListener("pointerup", (e) => {
-    if (arrowTapState.pointerId === null || e.pointerId !== arrowTapState.pointerId) { resetArrowTap(); return; }
-    const elapsed = (performance.now ? performance.now() : Date.now()) - arrowTapState.startTime;
-    const idx = arrowTapState.target ? arrowTapState.target.dataset.arrowIndex : null;
-    resetArrowTap();
-    if (elapsed > ARROW_TAP_MAX_DURATION || isTwoFingerTouch) return;
-    if (idx == null) return;
-    const arrows = (simulations[currentSim]?.sequences?.[currentSeq]?.arrows) || [];
-    const arrow = arrows[Number(idx)];
-    if (!arrow) return;
-    if (e.cancelable) e.preventDefault();
-    e.stopPropagation();
-    showArrowPopup(arrow, Number(idx), e.clientX, e.clientY);
-  });
-
-  svg.addEventListener("pointercancel", resetArrowTap);
 
   function drawArrows() {
     svg.querySelectorAll("line.arrow, line.arrow-hit, circle.arrow-hit-end, g.phase-badge").forEach(l => l.remove());
@@ -2294,6 +2473,18 @@ box.appendChild(delBtn);
       const y1 = item.playerIndex != null ? positions[item.playerIndex].y : item.y1;
       const x2 = item.x2, y2 = item.y2;
 
+      // Fonction pour gérer le tap/clic sur une flèche (popup)
+      const handleArrowTap = (e) => {
+        if (isTwoFingerTouch) {
+          return;
+        }
+        if (e.cancelable) e.preventDefault();
+        e.stopPropagation();
+        if (item.playerIndex != null) {
+          openMovementPanelForPlayer(item.playerIndex);
+        }
+      };
+
       // Debug: détecter tout contact sur les flèches
       const debugTouch = (e) => {
         console.log("[DEBUG ARROW] Event:", e.type, "sur", e.target.className, "pointerType:", e.pointerType || "N/A");
@@ -2307,9 +2498,9 @@ box.appendChild(delBtn);
       line.setAttribute("stroke", getColorByType(item.type));
       line.setAttribute("stroke-width", 3);
       line.setAttribute("marker-end", "url(#arrowhead)");
-      line.dataset.arrowIndex = index;
       line.addEventListener("pointerdown", debugTouch);
       line.addEventListener("pointerup", debugTouch);
+      attachArrowTapGesture(line, handleArrowTap);
       svg.appendChild(line);
 
       // Zone de clic large (plus facile à taper sur mobile)
@@ -2320,9 +2511,9 @@ box.appendChild(delBtn);
       hit.setAttribute("stroke", "rgba(0,0,0,0)");
       hit.setAttribute("stroke-width", 24); // Augmenté pour mobile
       hit.setAttribute("pointer-events", "stroke");
-      hit.dataset.arrowIndex = index;
       hit.addEventListener("pointerdown", debugTouch);
       hit.addEventListener("pointerup", debugTouch);
+      attachArrowTapGesture(hit, handleArrowTap);
       svg.appendChild(hit);
 
       // Zone de clic sur la pointe (agrandie pour mobile)
@@ -2332,9 +2523,9 @@ box.appendChild(delBtn);
       head.setAttribute("r", 18); // Augmenté de 12 à 18 pour mobile
       head.setAttribute("fill", "rgba(0,0,0,0)");
       head.setAttribute("pointer-events", "all");
-      head.dataset.arrowIndex = index;
       head.addEventListener("pointerdown", debugTouch);
       head.addEventListener("pointerup", debugTouch);
+      attachArrowTapGesture(head, handleArrowTap);
       svg.appendChild(head);
 
       // Badge de phase (numéro)
@@ -2826,7 +3017,7 @@ box.appendChild(delBtn);
       clearPlayerEditorUI();
       simulations[name] = {
         initialPositions: [],
-        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [] }],
+        sequences: [{ name: "Séquence 1", arrows: [], ballPos: { x: 450, y: 300 }, ballPosFinal:null, comment: "", annotations: [], sprites: [], movementSettings: [] }],
         playerConfigs: [],
       };
       // réinitialiser explicitement les configurations pour éviter de reprendre celles de la simulation précédente
@@ -2841,7 +3032,7 @@ box.appendChild(delBtn);
     newSeqBtn.onclick = function () {
       const name = prompt("Nom de la séquence ?");
       if (!name) return;
-      simulations[currentSim].sequences.push({ name, arrows: [], comment: "", ballPosFinal:null, annotations: [], sprites: [] });
+      simulations[currentSim].sequences.push({ name, arrows: [], comment: "", ballPosFinal:null, annotations: [], sprites: [], movementSettings: [] });
       currentSeq = simulations[currentSim].sequences.length - 1;
       saveSimulations(); updateSeqSelect(); drawField(); createPlayers(); drawPlayerConfigUI(); syncCommentBar(); drawAnnotations();
     };
@@ -3374,8 +3565,6 @@ if (style==="rond"){
         spriteUrls.add(pluginUrl + "assets/" + s);
       }
     }
-    // Fallback garanti : toujours charger la silhouette de base pour éviter les joueurs invisibles
-    spriteUrls.add(pluginUrl + "assets/" + playerSprites[0].src);
     const allUrls = [terrainUrl, ballUrl, ...spriteUrls];
     const results = await Promise.all(allUrls.map(u=>loadImageAbs(u)));
     const assets = { terrain: results[0], ball: results[1], sprites: {} };
@@ -3384,7 +3573,7 @@ if (style==="rond"){
     return assets;
   }
 
-  function startCanvasRecorder(canvas, fps = 60){
+  function startCanvasRecorder(canvas, fps = 50){
     const stream = canvas.captureStream(fps);
     let mime = 'video/webm;codecs=vp9';
     if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
@@ -3409,7 +3598,6 @@ if (style==="rond"){
     return { rec, stopAndSave };
   }
 
-  // Rendu unique d'une frame vidéo (utilisé par toutes les boucles d'animation export)
   function drawFrameCanvas(ctx, assets, positions, ballPos, seqIndex, {showArrows=true}={}){
     const W = ctx.canvas.width = 900;
     const H = ctx.canvas.height = 600;
@@ -3490,25 +3678,23 @@ if (style==="rond"){
 
     // Joueurs
     const scale = getDisplay().playerScale||0.8;
-    ensurePlayerConfigs();
-    for (let i=0;i<positions.length;i++){
-      const conf = playerConfigs[i] || {};
-      const style = effStyle(conf);
-      if (style==="rond"){
-        const r = Math.round(22*scale);
-        ctx.fillStyle = effCircleColor(conf);
-        ctx.strokeStyle="#fff"; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(positions[i].x, positions[i].y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-      } else {
-        const spriteName = effSeqSprite(conf, seqIndex, i) || playerSprites[0].src;
-        const su = pluginUrl + "assets/" + spriteName;
-        const fallbackSu = pluginUrl + "assets/" + playerSprites[0].src;
-        const img = assets.sprites[su] || assets.sprites[fallbackSu];
-        if (img){
-          const w = Math.round(64*scale), h = Math.round(64*scale);
-          ctx.drawImage(img, positions[i].x - w/2, positions[i].y - (h*0.72), w, h);
-        }
-      }
+ensurePlayerConfigs();
+for (let i=0;i<positions.length;i++){
+  const conf = playerConfigs[i] || {};
+  const style = effStyle(conf);
+  if (style==="rond"){
+    const r = Math.round(22*scale);
+    ctx.fillStyle = effCircleColor(conf);
+    ctx.strokeStyle="#fff"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(positions[i].x, positions[i].y, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+  } else {
+    const su = pluginUrl + "assets/" + effSprite(conf);
+    const img = assets.sprites[su];
+    if (img){
+      const w = Math.round(64*scale), h = Math.round(64*scale);
+      ctx.drawImage(img, positions[i].x - w/2, positions[i].y - (h*0.72), w, h);
+    }
+  }
   
       // label
       const text = playerLabelText(i);
@@ -3549,27 +3735,10 @@ if (style==="rond"){
 
     const frameMs = 1000 / fps;
     let elapsed = 0;
-    let accumulator = 0;
-    let last = performance.now();
 
     return await new Promise(resolve=>{
-      const tick = (now)=>{
-        const delta = Math.min(now - last, frameMs * 3);
-        last = now;
-        accumulator += delta;
-
-        // Pas de rendu si on n'a pas atteint l'intervalle de frame cible (stabilité FPS)
-        if (accumulator < frameMs){
-          requestAnimationFrame(tick);
-          return;
-        }
-
-        // On peut rattraper un éventuel retard en consommant plusieurs frames logiques
-        while (accumulator >= frameMs){
-          elapsed += frameMs;
-          accumulator -= frameMs;
-        }
-
+      const tick = ()=>{
+        elapsed += frameMs;
         let running = false;
 
         steps.forEach(s=>{
@@ -3603,7 +3772,7 @@ if (style==="rond"){
     });
   }
 
-  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 60, showArrows = true){
+  async function animateAndRecordSequenceCanvas(seqIndex, startPositions, ctx, assets, fps = 50, showArrows = true){
     let positions = JSON.parse(JSON.stringify(startPositions));
     const arrows = (simulations[currentSim]?.sequences?.[seqIndex]?.arrows || []).map(a=>({
       ...a, phase: (typeof a.phase==="number"?a.phase:0)
@@ -3626,14 +3795,13 @@ if (style==="rond"){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const targetFps = 60;
-    const { stopAndSave } = startCanvasRecorder(canvas, targetFps);
+    const { stopAndSave } = startCanvasRecorder(canvas, 50);
 
     const assets = await preloadCanvasAssetsForSeq(currentSeq);
     let positions = getPositionsAtSequenceStart(currentSeq);
     // premier frame
     drawFrameCanvas(ctx, assets, positions, (currentSeq===0 ? (simulations[currentSim].sequences[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(currentSeq-1)), currentSeq, {showArrows});
-    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, targetFps, showArrows);
+    await animateAndRecordSequenceCanvas(currentSeq, positions, ctx, assets, 50, showArrows);
 
     const simName = currentSim || "Simulation";
     const seqName = (simulations[currentSim]?.sequences?.[currentSeq]?.name) || `Sequence-${currentSeq + 1}`;
@@ -3648,8 +3816,7 @@ if (style==="rond"){
     const canvas = document.createElement("canvas");
     canvas.width = 900; canvas.height = 600;
     const ctx = canvas.getContext("2d");
-    const targetFps = 60;
-    const { stopAndSave } = startCanvasRecorder(canvas, targetFps);
+    const { stopAndSave } = startCanvasRecorder(canvas, 50);
 
     let positions = getPositionsAtSequenceStart(0);
 
@@ -3657,7 +3824,7 @@ if (style==="rond"){
       const assets = await preloadCanvasAssetsForSeq(i);
       drawFrameCanvas(ctx, assets, positions, (i===0 ? (seqs[0].ballPos||{x:450,y:300}) : getBallPositionForSequence(i-1)), i, {showArrows});
       await new Promise(r=>setTimeout(r,120));
-      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, targetFps, showArrows);
+      positions = await animateAndRecordSequenceCanvas(i, positions, ctx, assets, 50, showArrows);
       await new Promise(r=>setTimeout(r,120));
     }
 
